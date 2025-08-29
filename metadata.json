@@ -1,0 +1,6 @@
+{
+  "name": "Script Craft",
+  "description": "An AI-powered application to transform source material into polished dialogue scripts by defining speaker personas, uploading content, generating drafts, and interactively editing the final output.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
