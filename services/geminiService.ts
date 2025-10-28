@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { Persona, GenerationSettings, ScriptLine } from '../types';
 
 if (!process.env.API_KEY) {
@@ -142,7 +142,10 @@ export const generateScript = async (
             p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
             p.motivations && `- Motivations: ${p.motivations}.`,
             p.quirks && `- Quirks: ${p.quirks}.`,
-            `- Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.`,
+            `- Speaking Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.`,
+            p.speakingPatterns.commonPauses && `- Common Pauses: ${p.speakingPatterns.commonPauses}.`,
+            p.speakingPatterns.fillerWords && `- Filler Words: ${p.speakingPatterns.fillerWords}.`,
+            p.speakingPatterns.speechImpediments && `- Speech Impediments: ${p.speakingPatterns.speechImpediments}.`
         ].filter(Boolean).join('\n');
 
 
@@ -162,7 +165,7 @@ ${sourceDocs}`
             ${showIntro}
             --- END INTRO ---
 
-        2.  **Speaker Personas & Their Knowledge Base**: You must strictly adhere to the persona descriptions provided. Each line of dialogue must reflect the assigned speaker's style, expertise, personality, AND be grounded in the information from THEIR OWN source documents. If a persona has no documents, their dialogue should be based on their general persona characteristics, often asking questions or facilitating the conversation.
+        2.  **Speaker Personas & Their Knowledge Base**: You must strictly adhere to the persona descriptions provided. Each line of dialogue must reflect the assigned speaker's style, expertise, personality, AND be grounded in the information from THEIR OWN source documents. This includes mimicking their specific speaking patterns like filler words, pauses, and any impediments. If a persona has no documents, their dialogue should be based on their general persona characteristics, often asking questions or facilitating the conversation.
             ${personaDescriptions}
 
         3.  **Source Material Interaction**: The conversation should be a dynamic exchange where speakers reference, build upon, or challenge points from their respective source materials. Do not simply have each speaker summarize their documents in turn. Create a real conversation.
@@ -198,6 +201,22 @@ ${sourceDocs}`
             config: {
                 responseMimeType: "application/json",
                 temperature: 0.75,
+                // Use responseSchema for structured JSON output
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            speakerId: {
+                                type: Type.STRING,
+                            },
+                            line: {
+                                type: Type.STRING,
+                            },
+                        },
+                        required: ["speakerId", "line"],
+                    },
+                },
             }
         });
 
@@ -245,6 +264,9 @@ export const reviseLineWithPrompt = async (
         speakerOfLine.motivations && `- Motivations: ${speakerOfLine.motivations}.`,
         speakerOfLine.quirks && `- Quirks: ${speakerOfLine.quirks}.`,
         `- Speaking Patterns: ${speakerOfLine.speakingPatterns.sentenceLength} sentences, ${speakerOfLine.speakingPatterns.vocabularyComplexity} vocabulary.`,
+        speakerOfLine.speakingPatterns.commonPauses && `- Common Pauses: ${speakerOfLine.speakingPatterns.commonPauses}.`,
+        speakerOfLine.speakingPatterns.fillerWords && `- Filler Words: ${speakerOfLine.speakingPatterns.fillerWords}.`,
+        speakerOfLine.speakingPatterns.speechImpediments && `- Speech Impediments: ${speakerOfLine.speakingPatterns.speechImpediments}.`
     ].filter(Boolean).join('\n');
 
     const prompt = `
@@ -322,7 +344,10 @@ export const generateNextLine = async (
             p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
             p.motivations && `- Motivations: ${p.motivations}.`,
             p.quirks && `- Quirks: ${p.quirks}.`,
-            `- Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary.`,
+            `- Speaking Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary.`,
+            p.speakingPatterns.commonPauses && `- Common Pauses: ${p.speakingPatterns.commonPauses}.`,
+            p.speakingPatterns.fillerWords && `- Filler Words: ${p.speakingPatterns.fillerWords}.`,
+            p.speakingPatterns.speechImpediments && `- Speech Impediments: ${p.speakingPatterns.speechImpediments}.`
         ].filter(Boolean).join('\n');
 
         return (
@@ -348,7 +373,7 @@ ${personaDetails}`
         TASK:
         The last speaker was ${script.length > 0 ? (personas.find(p=>p.id === script[script.length-1].speakerId)?.name || 'Unknown') : 'no one'}.
         The next line should be spoken by **${nextSpeaker.name} (id: ${nextSpeaker.id})**.
-        Write a single, natural, and context-aware line of dialogue for them. The line must be consistent with their persona and the flow of the conversation.
+        Write a single, natural, and context-aware line of dialogue for them. The line must be consistent with their persona (including specific speaking patterns) and the flow of the conversation.
 
         OUTPUT FORMAT:
         You MUST return a valid JSON object with ONLY a "line" property.
@@ -365,6 +390,14 @@ ${personaDetails}`
             config: {
                 responseMimeType: "application/json",
                 temperature: 0.8,
+                // Use responseSchema for structured JSON output
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        line: { type: Type.STRING },
+                    },
+                    required: ["line"],
+                },
             }
         });
 

@@ -28,6 +28,9 @@ const emptyPersona: Omit<Persona, 'id' | 'sourceDocuments' | 'avatarUrl'> = {
     sentenceLength: SentenceLength.MEDIUM,
     vocabularyComplexity: VocabComplexity.AVERAGE,
     humorLevel: HumorLevel.SUBTLE,
+    commonPauses: '',
+    fillerWords: '',
+    speechImpediments: '',
   },
 };
 
@@ -56,7 +59,6 @@ const PersonaSources: React.FC<{
           name: file.name,
           content: content,
         });
-// FIX: Explicitly type the error in the catch block to 'any' to avoid issues with the default 'unknown' type.
       } catch (error: any) {
         console.error("Error reading file:", error);
         alert(`Could not read file ${file.name}. Please ensure it is a text-based file (e.g., .txt, .md).`);
@@ -158,10 +160,18 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
                     <Textarea id="motivations" label="Motivations" value={persona.motivations} onChange={e => setPersona(p => ({...p, motivations: e.target.value}))} rows={2} placeholder="e.g., Driven by a desire for accuracy, wants to make complex topics accessible" />
                     <Input id="emotionalRange" label="Emotional Range" value={persona.emotionalRange} onChange={e => setPersona(p => ({...p, emotionalRange: e.target.value}))} placeholder="e.g., Calm and measured, excitable, prone to sarcasm" />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-divider">
-                    <Select id="sentence" label="Sentence Length" options={SENTENCE_LENGTHS} value={persona.speakingPatterns.sentenceLength} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, sentenceLength: e.target.value as SentenceLength}}))} />
-                    <Select id="vocab" label="Vocabulary Complexity" options={VOCAB_COMPLEXITIES} value={persona.speakingPatterns.vocabularyComplexity} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, vocabularyComplexity: e.target.value as VocabComplexity}}))} />
-                    <Select id="humor" label="Humor Level" options={HUMOR_LEVELS} value={persona.speakingPatterns.humorLevel} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, humorLevel: e.target.value as HumorLevel}}))} />
+                <div className="pt-6 border-t border-divider space-y-6">
+                    <h4 className="text-md font-semibold text-text-primary">Speaking Patterns</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Select id="sentence" label="Sentence Length" options={SENTENCE_LENGTHS} value={persona.speakingPatterns.sentenceLength} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, sentenceLength: e.target.value as SentenceLength}}))} />
+                        <Select id="vocab" label="Vocabulary Complexity" options={VOCAB_COMPLEXITIES} value={persona.speakingPatterns.vocabularyComplexity} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, vocabularyComplexity: e.target.value as VocabComplexity}}))} />
+                        <Select id="humor" label="Humor Level" options={HUMOR_LEVELS} value={persona.speakingPatterns.humorLevel} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, humorLevel: e.target.value as HumorLevel}}))} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+                        <Input id="pauses" label="Common Pauses (Optional)" value={persona.speakingPatterns.commonPauses} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, commonPauses: e.target.value }}))} placeholder="e.g., Uses '...' often" />
+                        <Input id="fillers" label="Filler Words (Optional)" value={persona.speakingPatterns.fillerWords} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, fillerWords: e.target.value }}))} placeholder="e.g., 'um', 'like', 'you know'" />
+                        <Input id="impediments" label="Speech Impediments (Optional)" value={persona.speakingPatterns.speechImpediments} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, speechImpediments: e.target.value }}))} placeholder="e.g., Slight stutter on 's'" />
+                    </div>
                 </div>
                 <div className="text-right">
                     <Button type="submit" leftIcon={<PlusIcon />}>Add Persona</Button>
@@ -342,6 +352,10 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, 
                                 {p.quirks && <p><span className="font-semibold text-text-secondary">Quirks:</span> <span className="text-text-primary">{p.quirks}</span></p>}
                                 {p.motivations && <p><span className="font-semibold text-text-secondary">Motivations:</span> <span className="text-text-primary">{p.motivations}</span></p>}
                                 {p.emotionalRange && <p><span className="font-semibold text-text-secondary">Emotional Range:</span> <span className="text-text-primary">{p.emotionalRange}</span></p>}
+                                {p.speakingPatterns.commonPauses && <p><span className="font-semibold text-text-secondary">Pauses:</span> <span className="text-text-primary">{p.speakingPatterns.commonPauses}</span></p>}
+                                {p.speakingPatterns.fillerWords && <p><span className="font-semibold text-text-secondary">Fillers:</span> <span className="text-text-primary">{p.speakingPatterns.fillerWords}</span></p>}
+                                {p.speakingPatterns.speechImpediments && <p><span className="font-semibold text-text-secondary">Impediments:</span> <span className="text-text-primary">{p.speakingPatterns.speechImpediments}</span></p>}
+
 
                                 <div className="flex flex-wrap gap-1 pt-1">
                                     {p.personalityTraits.slice(0, 3).map(t => <span key={t} className="bg-bg-primary text-xs font-medium px-2 py-1 rounded-full">{t}</span>)}

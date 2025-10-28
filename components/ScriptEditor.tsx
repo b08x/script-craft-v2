@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ScriptLine, Persona } from '../types';
 import Button from './common/Button';
@@ -139,7 +140,6 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({ script, setScript, personas
                                         <div className="mt-2"><Loader text="Revising line..." /></div>
                                     ) : (
                                       <textarea
-                                          // FIX: The ref callback should not return a value. Changed to a block body to ensure a void return.
                                           ref={el => { lineRefs.current[item.id] = el; }}
                                           rows={1}
                                           value={item.line}

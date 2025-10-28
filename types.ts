@@ -52,6 +52,9 @@ export interface Persona {
     sentenceLength: SentenceLength;
     vocabularyComplexity: VocabComplexity;
     humorLevel: HumorLevel;
+    commonPauses?: string;
+    fillerWords?: string;
+    speechImpediments?: string;
   };
   sourceDocuments: SourceDocument[];
 }

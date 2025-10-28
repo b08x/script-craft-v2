@@ -32,7 +32,7 @@ const SourceUploader: React.FC<SourceUploaderProps> = ({ sourceText, setSourceTe
 
       const sortedTopics = Object.entries(wordFrequencies)
 // FIX: Changed the sort implementation to be more explicit for TypeScript's type inference, ensuring the arithmetic operation is performed on numbers.
-        .sort(([,a],[,b]) => b-a)
+        .sort((a,b) => b[1]-a[1])
         .slice(0, 5)
         .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
         
