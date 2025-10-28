@@ -41,9 +41,13 @@ export interface Persona {
   id: string;
   name: string;
   role: string;
+  avatarUrl?: string;
   communicationStyle: CommunicationStyle;
   expertiseLevel: ExpertiseLevel;
   personalityTraits: string[];
+  quirks?: string;
+  motivations?: string;
+  emotionalRange?: string;
   speakingPatterns: {
     sentenceLength: SentenceLength;
     vocabularyComplexity: VocabComplexity;

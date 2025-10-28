@@ -33,9 +33,17 @@ And with that, here's the conversation with ${andNames}.`
         ), 1500));
     }
 
-    const personaSummary = personas.map(p =>
-        `- ${p.name} (${p.role}), an expert in ${p.expertiseLevel.toLowerCase()} level topics. Their knowledge base includes: ${p.sourceDocuments.map(d => d.name).join(', ') || 'general knowledge'}`
-    ).join('\n');
+    const personaSummary = personas.map(p => {
+        const details = [
+            `${p.name} (${p.role})`,
+            `an expert in ${p.expertiseLevel.toLowerCase()} level topics`,
+            p.personalityTraits.length > 0 ? `with traits like ${p.personalityTraits.join(', ')}` : '',
+            p.motivations ? `motivated by ${p.motivations}` : '',
+            `Their knowledge base includes: ${p.sourceDocuments.map(d => d.name).join(', ') || 'general knowledge'}`
+        ].filter(Boolean).join(', ');
+        return `- ${details}`;
+    }).join('\n');
+
 
     const allSources = personas.flatMap(p => p.sourceDocuments.map(d => `--- Document: ${d.name} for speaker ${p.name} ---\n${d.content}\n--- End Document ---`)).join('\n\n');
 
@@ -71,7 +79,6 @@ And with that, here's the conversation with ${andNames}.`
 
     try {
         const response = await ai.models.generateContent({
-            // FIX: Updated deprecated model name to 'gemini-2.5-flash' as per guidelines.
             model: "gemini-2.5-flash",
             contents: prompt,
             config: { temperature: 0.6 }
@@ -127,13 +134,21 @@ export const generateScript = async (
                 `--- Document ${i+1}: ${doc.name} ---\n${doc.content}\n--- End Document ${i+1} ---`
               ).join('\n\n')
             : `No specific source documents provided for ${p.name}. Base dialogue on their general persona characteristics (e.g., ask questions, facilitate).`;
+        
+        const personaDetails = [
+            `- Name/Role: ${p.name} / ${p.role}`,
+            `- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.`,
+            `- Personality: ${p.personalityTraits.join(', ')}.`,
+            p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
+            p.motivations && `- Motivations: ${p.motivations}.`,
+            p.quirks && `- Quirks: ${p.quirks}.`,
+            `- Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.`,
+        ].filter(Boolean).join('\n');
+
 
         return (
 `Persona ${index} (id: ${p.id}):
-- Name/Role: ${p.name} / ${p.role}
-- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.
-- Personality: ${p.personalityTraits.join(', ')}.
-- Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.
+${personaDetails}
 ${sourceDocs}`
         );
     }).join('\n\n');
@@ -178,7 +193,6 @@ ${sourceDocs}`
     
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            // FIX: Updated deprecated model name to 'gemini-2.5-flash' as per guidelines.
             model: "gemini-2.5-flash",
             contents: prompt,
             config: {
@@ -222,6 +236,17 @@ export const reviseLineWithPrompt = async (
         return `${speakerName}: ${line.line}${isCurrentLine}`;
     }).join('\n');
 
+    const personaDetails = [
+        `- Name: ${speakerOfLine.name}`,
+        `- Role: ${speakerOfLine.role}`,
+        `- Style: ${speakerOfLine.communicationStyle}, ${speakerOfLine.expertiseLevel} expertise.`,
+        `- Personality: ${speakerOfLine.personalityTraits.join(', ')}.`,
+        speakerOfLine.emotionalRange && `- Emotional Range: ${speakerOfLine.emotionalRange}.`,
+        speakerOfLine.motivations && `- Motivations: ${speakerOfLine.motivations}.`,
+        speakerOfLine.quirks && `- Quirks: ${speakerOfLine.quirks}.`,
+        `- Speaking Patterns: ${speakerOfLine.speakingPatterns.sentenceLength} sentences, ${speakerOfLine.speakingPatterns.vocabularyComplexity} vocabulary.`,
+    ].filter(Boolean).join('\n');
+
     const prompt = `
         You are an expert script editor. Your task is to revise a single line of dialogue based on a user's instruction, while maintaining the conversational context and the speaker's persona.
 
@@ -230,11 +255,7 @@ export const reviseLineWithPrompt = async (
         ${scriptHistory}
 
         SPEAKER PERSONA FOR THE LINE BEING REVISED:
-        - Name: ${speakerOfLine.name}
-        - Role: ${speakerOfLine.role}
-        - Style: ${speakerOfLine.communicationStyle}, ${speakerOfLine.expertiseLevel} expertise.
-        - Personality: ${speakerOfLine.personalityTraits.join(', ')}.
-        - Speaking Patterns: ${speakerOfLine.speakingPatterns.sentenceLength} sentences, ${speakerOfLine.speakingPatterns.vocabularyComplexity} vocabulary.
+        ${personaDetails}
 
         INSTRUCTION:
         Revise the line "${lineToRevise.line}" based on this user instruction: "${userPrompt}"
@@ -245,7 +266,6 @@ export const reviseLineWithPrompt = async (
     
     try {
         const response = await ai.models.generateContent({
-            // FIX: Updated deprecated model name to 'gemini-2.5-flash' as per guidelines.
             model: "gemini-2.5-flash",
             contents: prompt,
             config: { temperature: 0.7 }
@@ -295,12 +315,19 @@ export const generateNextLine = async (
     }
 
     const personaDescriptions = personas.map(p => {
+        const personaDetails = [
+            `- Name/Role: ${p.name} / ${p.role}`,
+            `- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.`,
+            `- Personality: ${p.personalityTraits.join(', ')}.`,
+            p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
+            p.motivations && `- Motivations: ${p.motivations}.`,
+            p.quirks && `- Quirks: ${p.quirks}.`,
+            `- Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary.`,
+        ].filter(Boolean).join('\n');
+
         return (
 `Persona (id: ${p.id}):
-- Name/Role: ${p.name} / ${p.role}
-- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.
-- Personality: ${p.personalityTraits.join(', ')}.
-- Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary.`
+${personaDetails}`
         );
     }).join('\n\n');
 
@@ -333,7 +360,6 @@ export const generateNextLine = async (
     
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            // FIX: Updated deprecated model name to 'gemini-2.5-flash' as per guidelines.
             model: "gemini-2.5-flash",
             contents: prompt,
             config: {

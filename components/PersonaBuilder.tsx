@@ -6,6 +6,7 @@ import Button from './common/Button';
 import Card from './common/Card';
 import Input from './common/Input';
 import Select from './common/Select';
+import Textarea from './common/Textarea';
 import { PlusIcon, TrashIcon, ArrowRightIcon, UploadIcon, ArrowDownTrayIcon } from './icons/Icons';
 
 interface PersonaBuilderProps {
@@ -14,12 +15,15 @@ interface PersonaBuilderProps {
   onComplete: () => void;
 }
 
-const emptyPersona: Omit<Persona, 'id' | 'sourceDocuments'> = {
+const emptyPersona: Omit<Persona, 'id' | 'sourceDocuments' | 'avatarUrl'> = {
   name: '',
   role: '',
   communicationStyle: CommunicationStyle.CONVERSATIONAL,
   expertiseLevel: ExpertiseLevel.INTERMEDIATE,
   personalityTraits: [],
+  quirks: '',
+  motivations: '',
+  emotionalRange: '',
   speakingPatterns: {
     sentenceLength: SentenceLength.MEDIUM,
     vocabularyComplexity: VocabComplexity.AVERAGE,
@@ -52,7 +56,8 @@ const PersonaSources: React.FC<{
           name: file.name,
           content: content,
         });
-      } catch (error) {
+// FIX: Explicitly type the error in the catch block to 'any' to avoid issues with the default 'unknown' type.
+      } catch (error: any) {
         console.error("Error reading file:", error);
         alert(`Could not read file ${file.name}. Please ensure it is a text-based file (e.g., .txt, .md).`);
       }
@@ -147,7 +152,13 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
                         ))}
                     </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="pt-6 mt-6 border-t border-divider space-y-6">
+                    <h4 className="text-md font-semibold text-text-primary">Deeper Characteristics <span className="text-text-secondary font-normal">(Optional)</span></h4>
+                    <Textarea id="quirks" label="Quirks" value={persona.quirks} onChange={e => setPersona(p => ({...p, quirks: e.target.value}))} rows={2} placeholder="e.g., Tends to use analogies, often fidgets with a pen" />
+                    <Textarea id="motivations" label="Motivations" value={persona.motivations} onChange={e => setPersona(p => ({...p, motivations: e.target.value}))} rows={2} placeholder="e.g., Driven by a desire for accuracy, wants to make complex topics accessible" />
+                    <Input id="emotionalRange" label="Emotional Range" value={persona.emotionalRange} onChange={e => setPersona(p => ({...p, emotionalRange: e.target.value}))} placeholder="e.g., Calm and measured, excitable, prone to sarcasm" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-divider">
                     <Select id="sentence" label="Sentence Length" options={SENTENCE_LENGTHS} value={persona.speakingPatterns.sentenceLength} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, sentenceLength: e.target.value as SentenceLength}}))} />
                     <Select id="vocab" label="Vocabulary Complexity" options={VOCAB_COMPLEXITIES} value={persona.speakingPatterns.vocabularyComplexity} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, vocabularyComplexity: e.target.value as VocabComplexity}}))} />
                     <Select id="humor" label="Humor Level" options={HUMOR_LEVELS} value={persona.speakingPatterns.humorLevel} onChange={e => setPersona(p => ({...p, speakingPatterns: {...p.speakingPatterns, humorLevel: e.target.value as HumorLevel}}))} />
@@ -173,6 +184,27 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, 
     
     const updatePersona = (updatedPersona: Persona) => {
         setPersonas(personas.map(p => p.id === updatedPersona.id ? updatedPersona : p));
+    };
+
+    const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>, personaId: string) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 1024 * 1024) { // 1MB limit
+            alert("Image is too large. Please select an image under 1MB.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const avatarUrl = e.target?.result as string;
+            const personaToUpdate = personas.find(p => p.id === personaId);
+            if (personaToUpdate) {
+                updatePersona({ ...personaToUpdate, avatarUrl });
+            }
+        };
+        reader.readAsDataURL(file);
+        if (event.target) event.target.value = '';
     };
 
     const handleExportPersonas = () => {
@@ -219,6 +251,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, 
                             ...personaData,
                             id: `${Date.now()}-${p.name.replace(/\s+/g, '-')}`, // Assign new unique ID
                             sourceDocuments: p.sourceDocuments || [],
+                            avatarUrl: p.avatarUrl || undefined,
                         };
                     });
 
@@ -267,27 +300,58 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, 
             </div>
             
             {personas.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {personas.map(p => (
-                        <Card key={p.id} className="flex flex-col justify-between">
-                            <div>
-                                <div className="flex justify-between items-start">
-                                    <h4 className="text-lg font-bold text-accent-primary">{p.name}</h4>
-                                    <button onClick={() => removePersona(p.id)} className="text-gray-400 hover:text-red-400 transition-colors">
-                                        <TrashIcon className="w-5 h-5"/>
-                                    </button>
+                        <Card key={p.id} className="flex flex-col">
+                           <div className="flex items-start gap-4">
+                                <div className="relative flex-shrink-0">
+                                    {p.avatarUrl ? (
+                                        <img src={p.avatarUrl} alt={p.name} className="h-16 w-16 rounded-full object-cover bg-bg-primary" />
+                                    ) : (
+                                        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-secondary text-2xl font-bold text-white">
+                                            {p.name.charAt(0) || '?'}
+                                        </span>
+                                    )}
+                                    <label htmlFor={`avatar-upload-${p.id}`} className="absolute -bottom-1 -right-1 flex items-center justify-center h-6 w-6 bg-bg-primary rounded-full cursor-pointer hover:bg-divider ring-2 ring-bg-secondary transition-colors" title="Upload Avatar">
+                                        <UploadIcon className="w-4 h-4 text-text-secondary" />
+                                        <input
+                                            id={`avatar-upload-${p.id}`}
+                                            type="file"
+                                            className="sr-only"
+                                            accept="image/png, image/jpeg, image/webp"
+                                            onChange={(e) => handleAvatarChange(e, p.id)}
+                                        />
+                                    </label>
                                 </div>
-                                <p className="text-sm text-text-secondary font-medium">{p.role}</p>
-                                <div className="mt-4 space-y-2 text-sm">
-                                    <p><span className="font-semibold">Style:</span> {p.communicationStyle}</p>
-                                    <p><span className="font-semibold">Expertise:</span> {p.expertiseLevel}</p>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                        {p.personalityTraits.slice(0, 3).map(t => <span key={t} className="bg-bg-primary text-xs font-medium px-2 py-1 rounded-full">{t}</span>)}
-                                        {p.personalityTraits.length > 3 && <span className="bg-bg-primary text-xs font-medium px-2 py-1 rounded-full">...</span>}
+                                
+                                <div className="flex-grow">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h4 className="text-lg font-bold text-accent-primary">{p.name}</h4>
+                                            <p className="text-sm text-text-secondary font-medium">{p.role}</p>
+                                        </div>
+                                        <button onClick={() => removePersona(p.id)} className="text-gray-400 hover:text-red-400 transition-colors">
+                                            <TrashIcon className="w-5 h-5"/>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
-                            <PersonaSources persona={p} onUpdatePersona={updatePersona} />
+                            <div className="mt-4 space-y-2 text-sm flex-grow">
+                                <p><span className="font-semibold text-text-secondary">Style:</span> {p.communicationStyle}</p>
+                                <p><span className="font-semibold text-text-secondary">Expertise:</span> {p.expertiseLevel}</p>
+                                {p.quirks && <p><span className="font-semibold text-text-secondary">Quirks:</span> <span className="text-text-primary">{p.quirks}</span></p>}
+                                {p.motivations && <p><span className="font-semibold text-text-secondary">Motivations:</span> <span className="text-text-primary">{p.motivations}</span></p>}
+                                {p.emotionalRange && <p><span className="font-semibold text-text-secondary">Emotional Range:</span> <span className="text-text-primary">{p.emotionalRange}</span></p>}
+
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                    {p.personalityTraits.slice(0, 3).map(t => <span key={t} className="bg-bg-primary text-xs font-medium px-2 py-1 rounded-full">{t}</span>)}
+                                    {p.personalityTraits.length > 3 && <span className="bg-bg-primary text-xs font-medium px-2 py-1 rounded-full">+{p.personalityTraits.length-3} more</span>}
+                                </div>
+                            </div>
+
+                            <div className="mt-auto">
+                               <PersonaSources persona={p} onUpdatePersona={updatePersona} />
+                            </div>
                         </Card>
                     ))}
                 </div>
