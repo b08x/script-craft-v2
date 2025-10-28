@@ -78,3 +78,15 @@ export const MusicalNoteIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) 
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9c0 .594.406 1.125.937 1.343A4.502 4.502 0 0 0 15 10.5c.613 0 1.203-.102 1.74-.288A1.5 1.5 0 0 0 18 8.975V4.5M9 9L5.25 12M18 4.5l-3.75 3M9 15a1.5 1.5 0 0 1-1.5-1.5V12A1.5 1.5 0 0 1 9 10.5m0 4.5a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5m0 4.5a1.5 1.5 0 0 1-1.5-1.5V12a1.5 1.5 0 0 1 1.5-1.5m0 0a1.5 1.5 0 0 0 1.5-1.5V9" />
     </svg>
 );
+
+export const MicrophoneIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 0 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+    </svg>
+);
+
+export const StopIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
+    </svg>
+);

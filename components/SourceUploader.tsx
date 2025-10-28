@@ -31,8 +31,8 @@ const SourceUploader: React.FC<SourceUploaderProps> = ({ sourceText, setSourceTe
       }, {} as Record<string, number>);
 
       const sortedTopics = Object.entries(wordFrequencies)
-// FIX: Changed the sort implementation to use destructuring for more explicit type inference, ensuring the arithmetic operation is performed on numbers.
-        .sort(([, countA], [, countB]) => countB - countA)
+        // FIX: Explicitly cast count values to Number to ensure they are numeric before performing subtraction, resolving a TypeScript error.
+        .sort(([, countA], [, countB]) => Number(countB) - Number(countA))
         .slice(0, 5)
         .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
         

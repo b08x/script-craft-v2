@@ -67,6 +67,20 @@ export interface Persona {
   sourceDocuments: SourceDocument[];
 }
 
+export interface PersonaAnalysisResult {
+    name?: string;
+    role?: string;
+    communicationStyle?: CommunicationStyle;
+    expertiseLevel?: ExpertiseLevel;
+    personalityTraits?: string[];
+    speakingPatterns?: Partial<{
+        sentenceLength: SentenceLength;
+        vocabularyComplexity: VocabComplexity;
+        humorLevel: HumorLevel;
+        fillerWords: string;
+    }>;
+}
+
 export interface ScriptLine {
   id: string;
   speakerId: string;

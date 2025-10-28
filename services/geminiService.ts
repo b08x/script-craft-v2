@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import { Persona, GenerationSettings, ScriptLine } from '../types';
+import { Persona, GenerationSettings, ScriptLine, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, PersonaAnalysisResult } from '../types';
+import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES } from "../constants";
 
 if (!process.env.API_KEY) {
     // In a real app, this would be a fatal error.
@@ -441,5 +442,93 @@ ${personaDetails}`
     } catch (error) {
         console.error("Error generating next line from Gemini:", error);
         throw new Error("Failed to generate the next line using AI.");
+    }
+};
+
+export const analyzeTranscriptForPersona = async (transcript: string): Promise<PersonaAnalysisResult> => {
+    if (!process.env.API_KEY) {
+        return new Promise(resolve => setTimeout(() => resolve({
+            name: 'Analyzed Speaker',
+            role: 'Expert from Audio',
+            communicationStyle: CommunicationStyle.ANALYTICAL,
+            expertiseLevel: ExpertiseLevel.EXPERT,
+            personalityTraits: ['Pragmatic', 'Curious'],
+            speakingPatterns: {
+                sentenceLength: SentenceLength.LONG,
+                vocabularyComplexity: VocabComplexity.COMPLEX,
+                humorLevel: HumorLevel.NONE,
+                fillerWords: 'so, basically',
+            }
+        }), 2000));
+    }
+
+    const prompt = `
+        You are a personality and speech pattern analyst. Your task is to analyze a text transcript of someone speaking and create a persona profile for them. Based on the transcript, infer their communication style, expertise level, personality traits, and speaking patterns.
+
+        TRANSCRIPT:
+        "${transcript}"
+
+        TASK:
+        Analyze the transcript and provide a persona profile. Infer the following characteristics:
+        - **name**: A plausible name for the speaker. If none can be inferred, use a generic placeholder like "Speaker 1".
+        - **role**: A plausible role or profession for the speaker.
+        - **communicationStyle**: One of [${COMMUNICATION_STYLES.join(', ')}].
+        - **expertiseLevel**: One of [${EXPERTISE_LEVELS.join(', ')}].
+        - **personalityTraits**: An array of 2-4 relevant traits from this list: [${PERSONALITY_TRAIT_OPTIONS.join(', ')}].
+        - **speakingPatterns**: An object containing:
+          - **sentenceLength**: One of [${SENTENCE_LENGTHS.join(', ')}].
+          - **vocabularyComplexity**: One of [${VOCAB_COMPLEXITIES.join(', ')}].
+          - **humorLevel**: One of [${HUMOR_LEVELS.join(', ')}].
+          - **fillerWords**: A comma-separated string of any filler words you detect (e.g., "um, like, you know").
+
+        OUTPUT FORMAT:
+        Return a valid JSON object matching the schema provided. Do not include any other text or explanations.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                temperature: 0.5,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        name: { type: Type.STRING },
+                        role: { type: Type.STRING },
+                        communicationStyle: { type: Type.STRING, enum: COMMUNICATION_STYLES },
+                        expertiseLevel: { type: Type.STRING, enum: EXPERTISE_LEVELS },
+                        personalityTraits: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING }
+                        },
+                        speakingPatterns: {
+                            type: Type.OBJECT,
+                            properties: {
+                                sentenceLength: { type: Type.STRING, enum: SENTENCE_LENGTHS },
+                                vocabularyComplexity: { type: Type.STRING, enum: VOCAB_COMPLEXITIES },
+                                humorLevel: { type: Type.STRING, enum: HUMOR_LEVELS },
+                                fillerWords: { type: Type.STRING, description: "A comma-separated list of filler words detected." },
+                            },
+                        },
+                    },
+                }
+            }
+        });
+
+        const parsedText = response.text.trim();
+        const parsedData = JSON.parse(parsedText);
+        
+        // Basic validation
+        if (typeof parsedData !== 'object' || parsedData === null) {
+            throw new Error("AI returned invalid data format.");
+        }
+        
+        return parsedData as PersonaAnalysisResult;
+
+    } catch (error) {
+        console.error("Error analyzing transcript with Gemini:", error);
+        throw new Error("Failed to analyze the transcript using AI.");
     }
 };

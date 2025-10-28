@@ -1,13 +1,14 @@
 
 import React, { useState, useRef } from 'react';
-import { Persona, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, SourceDocument, ContextFile } from '../types';
+import { Persona, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, SourceDocument, ContextFile, PersonaAnalysisResult } from '../types';
 import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS } from '../constants';
 import Button from './common/Button';
 import Card from './common/Card';
 import Input from './common/Input';
 import Select from './common/Select';
 import Textarea from './common/Textarea';
-import { PlusIcon, TrashIcon, ArrowRightIcon, UploadIcon, ArrowDownTrayIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon } from './icons/Icons';
+import { PlusIcon, TrashIcon, ArrowRightIcon, UploadIcon, ArrowDownTrayIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon, MicrophoneIcon } from './icons/Icons';
+import AudioAnalysisModal from './AudioAnalysisModal';
 
 interface PersonaBuilderProps {
   personas: Persona[];
@@ -120,6 +121,7 @@ const PersonaSources: React.FC<{
 
 const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sourceDocuments'>) => void }> = ({ onAddPersona }) => {
     const [persona, setPersona] = useState(emptyPersona);
+    const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
 
     const handleTraitToggle = (trait: string) => {
         setPersona(p => ({
@@ -128,6 +130,33 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
                 ? p.personalityTraits.filter(t => t !== trait)
                 : [...p.personalityTraits, trait]
         }));
+    };
+
+    const handleAnalysisComplete = (analysis: PersonaAnalysisResult) => {
+        const mergedSpeakingPatterns = {
+            ...persona.speakingPatterns,
+            ...(analysis.speakingPatterns || {}),
+        };
+
+        setPersona(prev => {
+            const newTraits = analysis.personalityTraits && analysis.personalityTraits.length > 0
+                ? [...new Set([...prev.personalityTraits, ...analysis.personalityTraits])]
+                : prev.personalityTraits;
+            
+            return {
+                ...prev,
+                name: analysis.name || prev.name,
+                role: analysis.role || prev.role,
+                communicationStyle: analysis.communicationStyle || prev.communicationStyle,
+                expertiseLevel: analysis.expertiseLevel || prev.expertiseLevel,
+                personalityTraits: newTraits,
+                speakingPatterns: {
+                    ...prev.speakingPatterns,
+                    ...mergedSpeakingPatterns
+                }
+            };
+        });
+        setIsAudioModalOpen(false);
     };
 
     const handleContextFileChange = (
@@ -168,8 +197,19 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
 
     return (
         <Card>
+            <AudioAnalysisModal
+                isOpen={isAudioModalOpen}
+                onClose={() => setIsAudioModalOpen(false)}
+                onAnalysisComplete={handleAnalysisComplete}
+            />
             <form onSubmit={handleSubmit} className="space-y-6">
-                <h3 className="text-xl font-semibold text-text-primary">Create New Persona</h3>
+                <div className="flex flex-wrap justify-between items-center gap-4">
+                    <h3 className="text-xl font-semibold text-text-primary">Create New Persona</h3>
+                    <Button type="button" variant="secondary" leftIcon={<MicrophoneIcon />} onClick={() => setIsAudioModalOpen(true)}>
+                        Analyze from Audio
+                    </Button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Input id="name" label="Speaker Name" value={persona.name} onChange={e => setPersona(p => ({...p, name: e.target.value}))} required />
                     <Input id="role" label="Role (e.g., Host, Expert)" value={persona.role} onChange={e => setPersona(p => ({...p, role: e.target.value}))} required />
