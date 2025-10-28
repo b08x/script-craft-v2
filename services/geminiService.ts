@@ -17,6 +17,26 @@ const mockScript: ScriptLine[] = [
     { id: '4', speakerId: '1', line: 'Exactly. It\'s about the annual average of solar irradiance, not just having perfect blue skies. Plus, advancements in battery storage are solving the intermittency problem, making it a truly reliable power source.' },
 ];
 
+/**
+ * Safely decodes a base64 string, supporting UTF-8 characters.
+ * @param base64 The base64 string to decode.
+ * @returns The decoded string, or an empty string if decoding fails.
+ */
+const decodeBase64 = (base64: string): string => {
+    try {
+        // Use TextDecoder for robust UTF-8 support
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return new TextDecoder().decode(bytes);
+    } catch (e) {
+        console.error("Failed to decode base64 string:", e);
+        return "";
+    }
+}
+
 export const generateIntroSuggestion = async (personas: Persona[]): Promise<string> => {
     if (!process.env.API_KEY) {
         const names = personas.map(p => p.name).join(', ');
@@ -117,6 +137,23 @@ const parseAndValidateResponse = (text: string, personas: Persona[]): ScriptLine
     }
 };
 
+const getPersonaPromptDetails = (p: Persona): string => {
+    const details = [
+        `- Name/Role: ${p.name} / ${p.role}`,
+        `- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.`,
+        `- Personality: ${p.personalityTraits.join(', ')}.`,
+        p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
+        p.motivations && `- Motivations: ${p.motivations}.`,
+        p.quirks && `- Quirks: ${p.quirks}.`,
+        p.deeperCharsContextFile && `- Deeper characteristics are also informed by a provided ${p.deeperCharsContextFile.type} file named "${p.deeperCharsContextFile.name}".`,
+        `- Speaking Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.`,
+        p.speakingPatterns.commonPauses && `- Common Pauses: ${p.speakingPatterns.commonPauses}.`,
+        p.speakingPatterns.fillerWords && `- Filler Words: ${p.speakingPatterns.fillerWords}.`,
+        p.speakingPatterns.speechImpediments && `- Speech Impediments: ${p.speakingPatterns.speechImpediments}.`
+    ];
+    return details.filter(Boolean).join('\n');
+}
+
 export const generateScript = async (
     personas: Persona[],
     settings: GenerationSettings,
@@ -129,29 +166,33 @@ export const generateScript = async (
     }
 
     const personaDescriptions = personas.map((p, index) => {
+        let speakingContext = '';
+        const contextFile = p.speakingPatterns.speakingContextFile;
+        if (contextFile) {
+            if (contextFile.type.startsWith('text/')) {
+                const fileContent = decodeBase64(contextFile.data.split(',')[1] || '');
+                if (fileContent) {
+                    speakingContext = `\nReference for speaking style from "${contextFile.name}":\n---\n${fileContent}\n---`;
+                }
+            } else {
+                // For PDF or other types, just mention the file
+                speakingContext = `\nTheir speaking style is also informed by a provided file: "${contextFile.name}".`;
+            }
+        }
+
         const sourceDocs = p.sourceDocuments.length > 0
             ? `Knowledge Base for ${p.name} (MUST draw from these sources):\n` + p.sourceDocuments.map((doc, i) =>
                 `--- Document ${i+1}: ${doc.name} ---\n${doc.content}\n--- End Document ${i+1} ---`
               ).join('\n\n')
             : `No specific source documents provided for ${p.name}. Base dialogue on their general persona characteristics (e.g., ask questions, facilitate).`;
         
-        const personaDetails = [
-            `- Name/Role: ${p.name} / ${p.role}`,
-            `- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.`,
-            `- Personality: ${p.personalityTraits.join(', ')}.`,
-            p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
-            p.motivations && `- Motivations: ${p.motivations}.`,
-            p.quirks && `- Quirks: ${p.quirks}.`,
-            `- Speaking Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.`,
-            p.speakingPatterns.commonPauses && `- Common Pauses: ${p.speakingPatterns.commonPauses}.`,
-            p.speakingPatterns.fillerWords && `- Filler Words: ${p.speakingPatterns.fillerWords}.`,
-            p.speakingPatterns.speechImpediments && `- Speech Impediments: ${p.speakingPatterns.speechImpediments}.`
-        ].filter(Boolean).join('\n');
+        const personaDetails = getPersonaPromptDetails(p);
 
 
         return (
 `Persona ${index} (id: ${p.id}):
 ${personaDetails}
+${speakingContext}
 ${sourceDocs}`
         );
     }).join('\n\n');
@@ -255,19 +296,7 @@ export const reviseLineWithPrompt = async (
         return `${speakerName}: ${line.line}${isCurrentLine}`;
     }).join('\n');
 
-    const personaDetails = [
-        `- Name: ${speakerOfLine.name}`,
-        `- Role: ${speakerOfLine.role}`,
-        `- Style: ${speakerOfLine.communicationStyle}, ${speakerOfLine.expertiseLevel} expertise.`,
-        `- Personality: ${speakerOfLine.personalityTraits.join(', ')}.`,
-        speakerOfLine.emotionalRange && `- Emotional Range: ${speakerOfLine.emotionalRange}.`,
-        speakerOfLine.motivations && `- Motivations: ${speakerOfLine.motivations}.`,
-        speakerOfLine.quirks && `- Quirks: ${speakerOfLine.quirks}.`,
-        `- Speaking Patterns: ${speakerOfLine.speakingPatterns.sentenceLength} sentences, ${speakerOfLine.speakingPatterns.vocabularyComplexity} vocabulary.`,
-        speakerOfLine.speakingPatterns.commonPauses && `- Common Pauses: ${speakerOfLine.speakingPatterns.commonPauses}.`,
-        speakerOfLine.speakingPatterns.fillerWords && `- Filler Words: ${speakerOfLine.speakingPatterns.fillerWords}.`,
-        speakerOfLine.speakingPatterns.speechImpediments && `- Speech Impediments: ${speakerOfLine.speakingPatterns.speechImpediments}.`
-    ].filter(Boolean).join('\n');
+    const personaDetails = getPersonaPromptDetails(speakerOfLine);
 
     const prompt = `
         You are an expert script editor. Your task is to revise a single line of dialogue based on a user's instruction, while maintaining the conversational context and the speaker's persona.
@@ -337,18 +366,7 @@ export const generateNextLine = async (
     }
 
     const personaDescriptions = personas.map(p => {
-        const personaDetails = [
-            `- Name/Role: ${p.name} / ${p.role}`,
-            `- Style: ${p.communicationStyle}, ${p.expertiseLevel} expertise.`,
-            `- Personality: ${p.personalityTraits.join(', ')}.`,
-            p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
-            p.motivations && `- Motivations: ${p.motivations}.`,
-            p.quirks && `- Quirks: ${p.quirks}.`,
-            `- Speaking Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary.`,
-            p.speakingPatterns.commonPauses && `- Common Pauses: ${p.speakingPatterns.commonPauses}.`,
-            p.speakingPatterns.fillerWords && `- Filler Words: ${p.speakingPatterns.fillerWords}.`,
-            p.speakingPatterns.speechImpediments && `- Speech Impediments: ${p.speakingPatterns.speechImpediments}.`
-        ].filter(Boolean).join('\n');
+        const personaDetails = getPersonaPromptDetails(p);
 
         return (
 `Persona (id: ${p.id}):

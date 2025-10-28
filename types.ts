@@ -5,6 +5,12 @@ export interface SourceDocument {
   content: string;
 }
 
+export interface ContextFile {
+    name: string;
+    type: string; // e.g., 'text/plain', 'audio/mpeg'
+    data: string; // base64 data URL
+}
+
 export enum CommunicationStyle {
   ANALYTICAL = 'Analytical',
   CONVERSATIONAL = 'Conversational',
@@ -48,6 +54,7 @@ export interface Persona {
   quirks?: string;
   motivations?: string;
   emotionalRange?: string;
+  deeperCharsContextFile?: ContextFile;
   speakingPatterns: {
     sentenceLength: SentenceLength;
     vocabularyComplexity: VocabComplexity;
@@ -55,6 +62,7 @@ export interface Persona {
     commonPauses?: string;
     fillerWords?: string;
     speechImpediments?: string;
+    speakingContextFile?: ContextFile;
   };
   sourceDocuments: SourceDocument[];
 }
