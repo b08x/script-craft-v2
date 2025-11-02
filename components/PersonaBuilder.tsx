@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Persona, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, SourceDocument, ContextFile, PersonaAnalysisResult } from '../types';
 import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS } from '../constants';
@@ -7,8 +6,10 @@ import Card from './common/Card';
 import Input from './common/Input';
 import Select from './common/Select';
 import Textarea from './common/Textarea';
-import { PlusIcon, TrashIcon, ArrowRightIcon, UploadIcon, ArrowDownTrayIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon, MicrophoneIcon } from './icons/Icons';
+import { PlusIcon, TrashIcon, ArrowRightIcon, UploadIcon, ArrowDownTrayIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon, MicrophoneIcon, SparklesIcon } from './icons/Icons';
 import AudioAnalysisModal from './AudioAnalysisModal';
+import { analyzeDocumentsForPersona } from '../services/geminiService';
+import Loader from './common/Loader';
 
 interface PersonaBuilderProps {
   personas: Persona[];
@@ -24,6 +25,7 @@ const emptyPersona: Omit<Persona, 'id' | 'sourceDocuments' | 'avatarUrl'> = {
   personalityTraits: [],
   quirks: '',
   motivations: '',
+  backstory: '',
   emotionalRange: '',
   speakingPatterns: {
     sentenceLength: SentenceLength.MEDIUM,
@@ -119,8 +121,11 @@ const PersonaSources: React.FC<{
 };
 
 
-const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sourceDocuments'>) => void }> = ({ onAddPersona }) => {
+const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sourceDocuments'>, documents: SourceDocument[]) => void }> = ({ onAddPersona }) => {
     const [persona, setPersona] = useState(emptyPersona);
+    const [sourceDocuments, setSourceDocuments] = useState<SourceDocument[]>([]);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
 
     const handleTraitToggle = (trait: string) => {
@@ -187,11 +192,59 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
         e.target.value = '';
     };
 
+    const handleSourceDocChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+    
+        const newDocuments: SourceDocument[] = [...sourceDocuments];
+    
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file) {
+            continue;
+          }
+          try {
+            const content = await file.text();
+            newDocuments.push({
+              id: `${Date.now()}-${file.name}`,
+              name: file.name,
+              content: content,
+            });
+          } catch (error: any) {
+            console.error("Error reading file:", error);
+            alert(`Could not read file ${file.name}. Please ensure it is a text-based file.`);
+          }
+        }
+    
+        setSourceDocuments(newDocuments);
+        event.target.value = '';
+      };
+
+    const removeSourceDoc = (docId: string) => {
+        setSourceDocuments(docs => docs.filter(doc => doc.id !== docId));
+    };
+
+    const handleAnalyzeDocuments = async () => {
+        if (sourceDocuments.length === 0) return;
+        setIsAnalyzing(true);
+        setAnalysisError(null);
+        try {
+            const analysis = await analyzeDocumentsForPersona(sourceDocuments);
+            handleAnalysisComplete(analysis); // Reuse the same logic as audio analysis
+        } catch (e: any) {
+            setAnalysisError(e.message || "An unknown error occurred.");
+        } finally {
+            setIsAnalyzing(false);
+        }
+    }
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if(persona.name && persona.role) {
-            onAddPersona(persona);
+            onAddPersona(persona, sourceDocuments);
             setPersona(emptyPersona);
+            setSourceDocuments([]);
+            setAnalysisError(null);
         }
     };
 
@@ -208,6 +261,38 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
                     <Button type="button" variant="secondary" leftIcon={<MicrophoneIcon />} onClick={() => setIsAudioModalOpen(true)}>
                         Analyze from Audio
                     </Button>
+                </div>
+
+                <div className="p-4 rounded-lg bg-bg-primary space-y-3 border border-divider">
+                    <h4 className="text-md font-semibold text-text-primary">Create from Documents</h4>
+                    <p className="text-sm text-text-secondary">Upload documents to have the AI analyze them and auto-fill the persona details below.</p>
+
+                    <div className="space-y-2">
+                        {sourceDocuments.map(doc => (
+                        <div key={doc.id} className="flex items-center justify-between bg-bg-secondary p-2 rounded-md text-left">
+                            <p className="text-xs text-text-secondary truncate pr-2" title={doc.name}>{doc.name}</p>
+                            <button onClick={() => removeSourceDoc(doc.id)} className="text-gray-500 hover:text-red-400 flex-shrink-0">
+                            <TrashIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+                        ))}
+                    </div>
+
+                    <label htmlFor="doc-upload" className="w-full flex justify-center items-center px-4 py-2 border-2 border-dashed border-divider rounded-md cursor-pointer hover:border-accent-primary transition-colors">
+                        <UploadIcon className="w-5 h-5 text-text-secondary mr-2"/>
+                        <span className="text-sm font-medium text-text-secondary">Add Document(s)</span>
+                    </label>
+                    <input id="doc-upload" type="file" className="sr-only" onChange={handleSourceDocChange} multiple accept=".txt,.md" />
+
+                    {sourceDocuments.length > 0 && !isAnalyzing && (
+                        <div className="pt-2">
+                            <Button type="button" onClick={handleAnalyzeDocuments} disabled={isAnalyzing} leftIcon={<SparklesIcon />}>
+                                Analyze & Auto-fill Form
+                            </Button>
+                        </div>
+                    )}
+                    {isAnalyzing && <Loader text="Analyzing documents..." />}
+                    {analysisError && <div className="text-red-400 text-sm mt-2">{analysisError}</div>}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -231,6 +316,7 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
                     <h4 className="text-md font-semibold text-text-primary">Deeper Characteristics <span className="text-text-secondary font-normal">(Optional)</span></h4>
                     <Textarea id="quirks" label="Quirks" value={persona.quirks} onChange={e => setPersona(p => ({...p, quirks: e.target.value}))} rows={2} placeholder="e.g., Tends to use analogies, often fidgets with a pen" />
                     <Textarea id="motivations" label="Motivations" value={persona.motivations} onChange={e => setPersona(p => ({...p, motivations: e.target.value}))} rows={2} placeholder="e.g., Driven by a desire for accuracy, wants to make complex topics accessible" />
+                    <Textarea id="backstory" label="Backstory" value={persona.backstory} onChange={e => setPersona(p => ({...p, backstory: e.target.value}))} rows={3} placeholder="e.g., Grew up in a small town, which sparked a lifelong interest in community-driven technology." />
                     <Input id="emotionalRange" label="Emotional Range" value={persona.emotionalRange} onChange={e => setPersona(p => ({...p, emotionalRange: e.target.value}))} placeholder="e.g., Calm and measured, excitable, prone to sarcasm" />
                     <div>
                         <label className="block text-sm font-medium text-text-secondary mb-1">Context (Audio/Video)</label>
@@ -291,8 +377,8 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
 const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, onComplete }) => {
     const importFileInputRef = useRef<HTMLInputElement>(null);
 
-    const addPersona = (persona: Omit<Persona, 'id' | 'sourceDocuments'>) => {
-        setPersonas([...personas, { ...persona, id: `${Date.now()}`, sourceDocuments: [] }]);
+    const addPersona = (persona: Omit<Persona, 'id' | 'sourceDocuments'>, documents: SourceDocument[]) => {
+        setPersonas([...personas, { ...persona, id: `${Date.now()}`, sourceDocuments: documents }]);
     };
 
     const removePersona = (id: string) => {
@@ -479,6 +565,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, 
                                 <p><span className="font-semibold text-text-secondary">Expertise:</span> {p.expertiseLevel}</p>
                                 {p.quirks && <p><span className="font-semibold text-text-secondary">Quirks:</span> <span className="text-text-primary">{p.quirks}</span></p>}
                                 {p.motivations && <p><span className="font-semibold text-text-secondary">Motivations:</span> <span className="text-text-primary">{p.motivations}</span></p>}
+                                {p.backstory && <p><span className="font-semibold text-text-secondary">Backstory:</span> <span className="text-text-primary">{p.backstory}</span></p>}
                                 {p.emotionalRange && <p><span className="font-semibold text-text-secondary">Emotional Range:</span> <span className="text-text-primary">{p.emotionalRange}</span></p>}
                                 {p.deeperCharsContextFile && renderContextFile(p.deeperCharsContextFile)}
                                 

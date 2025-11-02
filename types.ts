@@ -53,6 +53,7 @@ export interface Persona {
   personalityTraits: string[];
   quirks?: string;
   motivations?: string;
+  backstory?: string;
   emotionalRange?: string;
   deeperCharsContextFile?: ContextFile;
   speakingPatterns: {

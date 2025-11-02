@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import { Persona, GenerationSettings, ScriptLine, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, PersonaAnalysisResult } from '../types';
+import { Persona, GenerationSettings, ScriptLine, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, PersonaAnalysisResult, SourceDocument } from '../types';
 import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES } from "../constants";
 
 if (!process.env.API_KEY) {
@@ -145,6 +144,7 @@ const getPersonaPromptDetails = (p: Persona): string => {
         `- Personality: ${p.personalityTraits.join(', ')}.`,
         p.emotionalRange && `- Emotional Range: ${p.emotionalRange}.`,
         p.motivations && `- Motivations: ${p.motivations}.`,
+        p.backstory && `- Backstory: ${p.backstory}.`,
         p.quirks && `- Quirks: ${p.quirks}.`,
         p.deeperCharsContextFile && `- Deeper characteristics are also informed by a provided ${p.deeperCharsContextFile.type} file named "${p.deeperCharsContextFile.name}".`,
         `- Speaking Patterns: ${p.speakingPatterns.sentenceLength} sentences, ${p.speakingPatterns.vocabularyComplexity} vocabulary, ${p.speakingPatterns.humorLevel} humor.`,
@@ -444,6 +444,96 @@ ${personaDetails}`
         throw new Error("Failed to generate the next line using AI.");
     }
 };
+
+export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): Promise<PersonaAnalysisResult> => {
+    if (!process.env.API_KEY) {
+        return new Promise(resolve => setTimeout(() => resolve({
+            name: 'Dr. Alex Chen',
+            role: 'AI Researcher',
+            communicationStyle: CommunicationStyle.ANALYTICAL,
+            expertiseLevel: ExpertiseLevel.EXPERT,
+            personalityTraits: ['Curious', 'Pragmatic'],
+            speakingPatterns: {
+                sentenceLength: SentenceLength.MEDIUM,
+                vocabularyComplexity: VocabComplexity.COMPLEX,
+                humorLevel: HumorLevel.SUBTLE,
+                fillerWords: 'so, essentially',
+            }
+        }), 2000));
+    }
+
+    const combinedContent = documents.map(doc => `--- Document: ${doc.name} ---\n${doc.content}\n--- End Document ---`).join('\n\n');
+
+    const prompt = `
+        You are a personality and speech pattern analyst. Your task is to analyze a collection of documents (articles, papers, transcripts) and create a persona profile for the author or main subject. Based on the content and writing style, infer their communication style, expertise level, personality traits, and speaking patterns.
+
+        DOCUMENTS:
+        ${combinedContent}
+
+        TASK:
+        Analyze the documents and provide a single, synthesized persona profile. Infer the following characteristics:
+        - **name**: A plausible name for the speaker/author. If none can be inferred, use a descriptive placeholder like "Lead Researcher".
+        - **role**: A plausible role or profession for the speaker.
+        - **communicationStyle**: One of [${COMMUNICATION_STYLES.join(', ')}].
+        - **expertiseLevel**: One of [${EXPERTISE_LEVELS.join(', ')}].
+        - **personalityTraits**: An array of 2-4 relevant traits from this list: [${PERSONALITY_TRAIT_OPTIONS.join(', ')}].
+        - **speakingPatterns**: An object containing:
+          - **sentenceLength**: One of [${SENTENCE_LENGTHS.join(', ')}].
+          - **vocabularyComplexity**: One of [${VOCAB_COMPLEXITIES.join(', ')}].
+          - **humorLevel**: One of [${HUMOR_LEVELS.join(', ')}].
+          - **fillerWords**: A comma-separated string of any filler words or phrases you detect (e.g., "in essence, basically").
+
+        OUTPUT FORMAT:
+        Return a valid JSON object matching the schema provided. Do not include any other text or explanations.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                temperature: 0.5,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        name: { type: Type.STRING },
+                        role: { type: Type.STRING },
+                        communicationStyle: { type: Type.STRING, enum: COMMUNICATION_STYLES },
+                        expertiseLevel: { type: Type.STRING, enum: EXPERTISE_LEVELS },
+                        personalityTraits: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING }
+                        },
+                        speakingPatterns: {
+                            type: Type.OBJECT,
+                            properties: {
+                                sentenceLength: { type: Type.STRING, enum: SENTENCE_LENGTHS },
+                                vocabularyComplexity: { type: Type.STRING, enum: VOCAB_COMPLEXITIES },
+                                humorLevel: { type: Type.STRING, enum: HUMOR_LEVELS },
+                                fillerWords: { type: Type.STRING, description: "A comma-separated list of filler words detected." },
+                            },
+                        },
+                    },
+                }
+            }
+        });
+
+        const parsedText = response.text.trim();
+        const parsedData = JSON.parse(parsedText);
+        
+        if (typeof parsedData !== 'object' || parsedData === null) {
+            throw new Error("AI returned invalid data format.");
+        }
+        
+        return parsedData as PersonaAnalysisResult;
+
+    } catch (error) {
+        console.error("Error analyzing documents with Gemini:", error);
+        throw new Error("Failed to analyze the documents using AI.");
+    }
+};
+
 
 export const analyzeTranscriptForPersona = async (transcript: string): Promise<PersonaAnalysisResult> => {
     if (!process.env.API_KEY) {
