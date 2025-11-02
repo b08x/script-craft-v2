@@ -453,11 +453,17 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
             communicationStyle: CommunicationStyle.ANALYTICAL,
             expertiseLevel: ExpertiseLevel.EXPERT,
             personalityTraits: ['Curious', 'Pragmatic'],
+            quirks: 'Uses academic language even in simple explanations.',
+            motivations: 'To find the underlying patterns in complex data.',
+            backstory: 'Seems to have a background in both computer science and linguistics.',
+            emotionalRange: 'Generally objective and calm, but shows enthusiasm for new discoveries.',
             speakingPatterns: {
                 sentenceLength: SentenceLength.MEDIUM,
                 vocabularyComplexity: VocabComplexity.COMPLEX,
                 humorLevel: HumorLevel.SUBTLE,
                 fillerWords: 'so, essentially',
+                commonPauses: 'Uses ellipses to connect related but distinct ideas.',
+                speechImpediments: 'None apparent from text.'
             }
         }), 2000));
     }
@@ -465,7 +471,7 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
     const combinedContent = documents.map(doc => `--- Document: ${doc.name} ---\n${doc.content}\n--- End Document ---`).join('\n\n');
 
     const prompt = `
-        You are a personality and speech pattern analyst. Your task is to analyze a collection of documents (articles, papers, transcripts) and create a persona profile for the author or main subject. Based on the content and writing style, infer their communication style, expertise level, personality traits, and speaking patterns.
+        You are a personality and speech pattern analyst. Your task is to analyze a collection of documents (articles, papers, transcripts) and create a persona profile for the author or main subject. Based on the content and writing style, infer their communication style, expertise level, personality traits, deeper characteristics, and speaking patterns.
 
         DOCUMENTS:
         ${combinedContent}
@@ -477,11 +483,17 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
         - **communicationStyle**: One of [${COMMUNICATION_STYLES.join(', ')}].
         - **expertiseLevel**: One of [${EXPERTISE_LEVELS.join(', ')}].
         - **personalityTraits**: An array of 2-4 relevant traits from this list: [${PERSONALITY_TRAIT_OPTIONS.join(', ')}].
+        - **quirks**: Any noticeable quirks or unique habits in their writing style (e.g., "Tends to use complex analogies", "Frequently uses rhetorical questions").
+        - **motivations**: What seems to be their primary motivation (e.g., "Driven by a desire for accuracy", "Wants to make complex topics accessible").
+        - **backstory**: A brief, inferred backstory that might explain their perspective (e.g., "Appears to have a background in academia before moving to industry").
+        - **emotionalRange**: The typical emotional tone of the writing (e.g., "Calm and measured", "Passionate and excitable", "Prone to sarcasm").
         - **speakingPatterns**: An object containing:
           - **sentenceLength**: One of [${SENTENCE_LENGTHS.join(', ')}].
           - **vocabularyComplexity**: One of [${VOCAB_COMPLEXITIES.join(', ')}].
           - **humorLevel**: One of [${HUMOR_LEVELS.join(', ')}].
           - **fillerWords**: A comma-separated string of any filler words or phrases you detect (e.g., "in essence, basically").
+          - **commonPauses**: Textual patterns that suggest pauses (e.g., "Frequent use of ellipses (...)", "Em-dashes for dramatic effect").
+          - **speechImpediments**: Any unusual syntax or repetition that might suggest a speech impediment if spoken.
 
         OUTPUT FORMAT:
         Return a valid JSON object matching the schema provided. Do not include any other text or explanations.
@@ -505,6 +517,10 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
                             type: Type.ARRAY,
                             items: { type: Type.STRING }
                         },
+                        quirks: { type: Type.STRING, description: "Noticeable quirks in writing style." },
+                        motivations: { type: Type.STRING, description: "Inferred primary motivation." },
+                        backstory: { type: Type.STRING, description: "A brief, inferred backstory." },
+                        emotionalRange: { type: Type.STRING, description: "The typical emotional tone." },
                         speakingPatterns: {
                             type: Type.OBJECT,
                             properties: {
@@ -512,6 +528,8 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
                                 vocabularyComplexity: { type: Type.STRING, enum: VOCAB_COMPLEXITIES },
                                 humorLevel: { type: Type.STRING, enum: HUMOR_LEVELS },
                                 fillerWords: { type: Type.STRING, description: "A comma-separated list of filler words detected." },
+                                commonPauses: { type: Type.STRING, description: "Textual patterns suggesting pauses." },
+                                speechImpediments: { type: Type.STRING, description: "Unusual syntax or repetition." },
                             },
                         },
                     },
@@ -540,20 +558,26 @@ export const analyzeTranscriptForPersona = async (transcript: string): Promise<P
         return new Promise(resolve => setTimeout(() => resolve({
             name: 'Analyzed Speaker',
             role: 'Expert from Audio',
-            communicationStyle: CommunicationStyle.ANALYTICAL,
-            expertiseLevel: ExpertiseLevel.EXPERT,
-            personalityTraits: ['Pragmatic', 'Curious'],
+            communicationStyle: CommunicationStyle.CONVERSATIONAL,
+            expertiseLevel: ExpertiseLevel.INTERMEDIATE,
+            personalityTraits: ['Enthusiastic', 'Creative'],
+            quirks: 'Often starts sentences with "So, the thing is..."',
+            motivations: 'Excited about sharing their passion project with others.',
+            backstory: 'An independent developer who built this project in their spare time.',
+            emotionalRange: 'Upbeat and positive.',
             speakingPatterns: {
-                sentenceLength: SentenceLength.LONG,
-                vocabularyComplexity: VocabComplexity.COMPLEX,
-                humorLevel: HumorLevel.NONE,
-                fillerWords: 'so, basically',
+                sentenceLength: SentenceLength.MEDIUM,
+                vocabularyComplexity: VocabComplexity.AVERAGE,
+                humorLevel: HumorLevel.FREQUENT,
+                fillerWords: 'like, you know, actually',
+                commonPauses: 'Short pauses for emphasis.',
+                speechImpediments: 'Slightly fast-paced speech.'
             }
         }), 2000));
     }
 
     const prompt = `
-        You are a personality and speech pattern analyst. Your task is to analyze a text transcript of someone speaking and create a persona profile for them. Based on the transcript, infer their communication style, expertise level, personality traits, and speaking patterns.
+        You are a personality and speech pattern analyst. Your task is to analyze a text transcript of someone speaking and create a persona profile for them. Based on the transcript, infer their communication style, expertise level, personality traits, deeper characteristics, and speaking patterns.
 
         TRANSCRIPT:
         "${transcript}"
@@ -565,11 +589,17 @@ export const analyzeTranscriptForPersona = async (transcript: string): Promise<P
         - **communicationStyle**: One of [${COMMUNICATION_STYLES.join(', ')}].
         - **expertiseLevel**: One of [${EXPERTISE_LEVELS.join(', ')}].
         - **personalityTraits**: An array of 2-4 relevant traits from this list: [${PERSONALITY_TRAIT_OPTIONS.join(', ')}].
+        - **quirks**: Any noticeable speaking quirks (e.g., "Uses analogies frequently").
+        - **motivations**: The speaker's apparent motivation (e.g., "To simplify a complex topic").
+        - **backstory**: A brief, inferred backstory based on their speech.
+        - **emotionalRange**: The speaker's emotional tone (e.g., "Enthusiastic and upbeat").
         - **speakingPatterns**: An object containing:
           - **sentenceLength**: One of [${SENTENCE_LENGTHS.join(', ')}].
           - **vocabularyComplexity**: One of [${VOCAB_COMPLEXITIES.join(', ')}].
           - **humorLevel**: One of [${HUMOR_LEVELS.join(', ')}].
           - **fillerWords**: A comma-separated string of any filler words you detect (e.g., "um, like, you know").
+          - **commonPauses**: How pauses are manifested (e.g., "long pauses between points").
+          - **speechImpediments**: Any noticeable speech impediments (e.g., "slight stutter on 't' sounds").
 
         OUTPUT FORMAT:
         Return a valid JSON object matching the schema provided. Do not include any other text or explanations.
@@ -593,6 +623,10 @@ export const analyzeTranscriptForPersona = async (transcript: string): Promise<P
                             type: Type.ARRAY,
                             items: { type: Type.STRING }
                         },
+                        quirks: { type: Type.STRING, description: "Noticeable speaking quirks." },
+                        motivations: { type: Type.STRING, description: "The speaker's apparent motivation." },
+                        backstory: { type: Type.STRING, description: "A brief, inferred backstory." },
+                        emotionalRange: { type: Type.STRING, description: "The speaker's emotional tone." },
                         speakingPatterns: {
                             type: Type.OBJECT,
                             properties: {
@@ -600,6 +634,8 @@ export const analyzeTranscriptForPersona = async (transcript: string): Promise<P
                                 vocabularyComplexity: { type: Type.STRING, enum: VOCAB_COMPLEXITIES },
                                 humorLevel: { type: Type.STRING, enum: HUMOR_LEVELS },
                                 fillerWords: { type: Type.STRING, description: "A comma-separated list of filler words detected." },
+                                commonPauses: { type: Type.STRING, description: "How pauses are manifested." },
+                                speechImpediments: { type: Type.STRING, description: "Any noticeable speech impediments." },
                             },
                         },
                     },

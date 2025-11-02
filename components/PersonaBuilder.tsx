@@ -138,16 +138,16 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
     };
 
     const handleAnalysisComplete = (analysis: PersonaAnalysisResult) => {
-        const mergedSpeakingPatterns = {
-            ...persona.speakingPatterns,
-            ...(analysis.speakingPatterns || {}),
-        };
-
         setPersona(prev => {
             const newTraits = analysis.personalityTraits && analysis.personalityTraits.length > 0
                 ? [...new Set([...prev.personalityTraits, ...analysis.personalityTraits])]
                 : prev.personalityTraits;
             
+            const mergedSpeakingPatterns = {
+                ...prev.speakingPatterns,
+                ...(analysis.speakingPatterns || {}),
+            };
+    
             return {
                 ...prev,
                 name: analysis.name || prev.name,
@@ -155,10 +155,11 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
                 communicationStyle: analysis.communicationStyle || prev.communicationStyle,
                 expertiseLevel: analysis.expertiseLevel || prev.expertiseLevel,
                 personalityTraits: newTraits,
-                speakingPatterns: {
-                    ...prev.speakingPatterns,
-                    ...mergedSpeakingPatterns
-                }
+                quirks: analysis.quirks || prev.quirks,
+                motivations: analysis.motivations || prev.motivations,
+                backstory: analysis.backstory || prev.backstory,
+                emotionalRange: analysis.emotionalRange || prev.emotionalRange,
+                speakingPatterns: mergedSpeakingPatterns
             };
         });
         setIsAudioModalOpen(false);

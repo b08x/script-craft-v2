@@ -1,4 +1,5 @@
 
+
 export interface SourceDocument {
   id: string;
   name: string;
@@ -74,11 +75,17 @@ export interface PersonaAnalysisResult {
     communicationStyle?: CommunicationStyle;
     expertiseLevel?: ExpertiseLevel;
     personalityTraits?: string[];
+    quirks?: string;
+    motivations?: string;
+    backstory?: string;
+    emotionalRange?: string;
     speakingPatterns?: Partial<{
         sentenceLength: SentenceLength;
         vocabularyComplexity: VocabComplexity;
         humorLevel: HumorLevel;
         fillerWords: string;
+        commonPauses: string;
+        speechImpediments: string;
     }>;
 }
 
