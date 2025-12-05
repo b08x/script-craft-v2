@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Persona, ScriptLine, GenerationSettings } from '../types';
 import { generateScript } from '../services/geminiService';
@@ -37,7 +36,11 @@ const DialogueGenerator: React.FC<DialogueGeneratorProps> = ({ personas, showInt
     }
   };
 
-  const isThinkingSupported = settings.modelName.includes('2.5');
+  // Thinking is supported on Gemini 2.5 series and Gemini 3.0 Pro
+  const isThinkingSupported = settings.modelName.includes('2.5') || settings.modelName.includes('3-pro');
+
+  // Determine max budget based on model (simplified logic: 24k for Flash, 32k for Pro)
+  const currentMaxBudget = settings.modelName.includes('flash') ? 24576 : MAX_THINKING_BUDGET;
 
   return (
     <div className="space-y-8">
@@ -127,8 +130,8 @@ const DialogueGenerator: React.FC<DialogueGeneratorProps> = ({ personas, showInt
                     </label>
                 </div>
                 
-                {isThinkingSupported && (
-                    <div className={`transition-opacity ${!isThinkingSupported ? 'opacity-50 pointer-events-none' : ''}`}>
+                {isThinkingSupported ? (
+                    <div>
                          <label htmlFor="thinking-budget" className="block text-sm font-medium text-text-secondary mb-2">
                             Thinking Budget: <span className="font-bold text-text-primary">{settings.thinkingBudget > 0 ? `${settings.thinkingBudget} tokens` : 'Disabled'}</span>
                         </label>
@@ -136,7 +139,7 @@ const DialogueGenerator: React.FC<DialogueGeneratorProps> = ({ personas, showInt
                             id="thinking-budget"
                             type="range"
                             min="0"
-                            max={MAX_THINKING_BUDGET}
+                            max={currentMaxBudget}
                             step="1024"
                             value={settings.thinkingBudget}
                             onChange={e => setSettings({...settings, thinkingBudget: parseInt(e.target.value, 10)})}
@@ -144,9 +147,13 @@ const DialogueGenerator: React.FC<DialogueGeneratorProps> = ({ personas, showInt
                         />
                          <div className="flex justify-between text-xs text-text-secondary mt-1">
                             <span>0 (Off)</span>
-                            <span>{MAX_THINKING_BUDGET} (Max)</span>
+                            <span>{currentMaxBudget} (Max)</span>
                         </div>
-                        <p className="text-xs text-text-secondary mt-2">Allocates tokens for reasoning before generating text. Useful for complex logic. Only available on Gemini 2.5.</p>
+                        <p className="text-xs text-text-secondary mt-2">Allocates tokens for reasoning before generating text. Useful for complex logic.</p>
+                    </div>
+                ) : (
+                    <div className="p-3 bg-bg-primary rounded-md border border-divider opacity-50">
+                        <p className="text-sm text-text-secondary">Thinking Budget is not supported for the selected model.</p>
                     </div>
                 )}
             </div>

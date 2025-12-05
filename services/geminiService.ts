@@ -1,7 +1,8 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import { Persona, GenerationSettings, ScriptLine, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, PersonaAnalysisResult, SourceDocument } from '../types';
+import { Persona, GenerationSettings, ScriptLine, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, PersonaAnalysisResult, SourceDocument, DocumentMetadata, DocumentChunk } from '../types';
 import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES } from "../constants";
+// @ts-ignore
+import mammoth from 'mammoth';
 
 if (!process.env.API_KEY) {
     // In a real app, this would be a fatal error.
@@ -37,6 +38,187 @@ const decodeBase64 = (base64: string): string => {
         return "";
     }
 }
+
+/**
+ * Converts a File object to a base64 string suitable for Gemini API.
+ */
+const fileToBase64 = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            const result = reader.result as string;
+            // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
+            const base64 = result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = error => reject(error);
+    });
+};
+
+// --- Topic Extraction & Document Processing ---
+
+export const extractTopicsFromContext = async (text: string): Promise<string[]> => {
+     if (!process.env.API_KEY) {
+        return new Promise(resolve => setTimeout(() => resolve(['Renewable Energy', 'Solar Efficiency', 'Grid Storage', 'Climate Myths', 'Technology Trends']), 1000));
+    }
+
+    const prompt = `
+        Perform semantic analysis on the provided source text.
+        1. Identify the core topics using n-gram analysis to detect multi-word phrases (e.g., "artificial intelligence" instead of "artificial", "intelligence").
+        2. Filter out common stopwords and generic terms.
+        3. Ensure topics are strictly relevant to the document context.
+        4. Return the top 10 most significant topics as a list of strings.
+
+        SOURCE TEXT:
+        ${text.substring(0, 30000)}... (truncated for analysis)
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                temperature: 0.3,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                }
+            }
+        });
+        
+        return JSON.parse(response.text) as string[];
+    } catch (e) {
+        console.error("Topic extraction failed", e);
+        return [];
+    }
+}
+
+export const processDocument = async (file: File): Promise<Partial<SourceDocument>> => {
+    const isPDF = file.type === 'application/pdf';
+    const isWord = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx');
+    
+    let textContent = '';
+    let promptParts: any[] = [];
+    
+    // 1. Extract Text / Prepare Content
+    if (isWord) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            textContent = result.value;
+            promptParts = [{ text: `Analyze the following text content:\n${textContent}` }];
+        } catch (e) {
+             console.error("Mammoth parsing failed", e);
+             throw new Error("Failed to parse Word document.");
+        }
+    } else if (isPDF) {
+        // For PDF, we send the file directly to Gemini
+        const base64Data = await fileToBase64(file);
+        promptParts = [
+            { inlineData: { mimeType: 'application/pdf', data: base64Data } },
+            { text: "Analyze this PDF document." }
+        ];
+    } else {
+        // Text/Markdown
+        textContent = await file.text();
+        promptParts = [{ text: `Analyze the following text content:\n${textContent}` }];
+    }
+
+    if (!process.env.API_KEY) {
+        // Mock result
+        return {
+            content: textContent || "Mock content derived from file.",
+            metadata: { author: "Unknown Author", date: new Date().toISOString(), fileType: file.type },
+            chunks: [{ id: '1', content: "Chunk 1", topics: ['Topic A'] }],
+            topics: ['Topic A', 'Topic B'],
+            processingStatus: 'completed'
+        };
+    }
+
+    // 2. Analyze with Gemini (Metadata, Chunking, Topic Clustering)
+    const prompt = `
+        You are an advanced document analyzer. Process the provided document content.
+        
+        TASKS:
+        1. **Extraction**: If the input is a PDF, extract the full raw text representation. If text is provided, use it.
+        2. **Metadata**: Infer the Author, Date (YYYY-MM-DD if possible), and Domain/Source context.
+        3. **Structuring**: Divide the document into semantic chunks (sections). Each chunk should have distinct thematic content.
+        4. **Topic Analysis**: For each chunk, identify relevant topics (using semantic n-gram analysis). Also provide a list of top-level topics for the entire document.
+        
+        OUTPUT FORMAT:
+        Return a valid JSON object matching the schema.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: {
+                parts: [
+                    ...promptParts,
+                    { text: prompt }
+                ]
+            },
+            config: {
+                temperature: 0.3,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        fullText: { type: Type.STRING, description: "The full extracted text of the document." },
+                        metadata: {
+                            type: Type.OBJECT,
+                            properties: {
+                                author: { type: Type.STRING },
+                                date: { type: Type.STRING },
+                                domain: { type: Type.STRING },
+                            }
+                        },
+                        allTopics: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING },
+                            description: "Top-level consistent topics across the document."
+                        },
+                        chunks: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    content: { type: Type.STRING },
+                                    topics: { type: Type.ARRAY, items: { type: Type.STRING } }
+                                },
+                                required: ["content", "topics"]
+                            }
+                        }
+                    },
+                    required: ["fullText", "metadata", "chunks", "allTopics"]
+                }
+            }
+        });
+
+        const result = JSON.parse(response.text);
+        
+        return {
+            content: result.fullText || textContent, // Prefer model extracted text for PDFs
+            metadata: { ...result.metadata, fileType: file.type },
+            topics: result.allTopics,
+            chunks: result.chunks.map((c: any, i: number) => ({
+                id: `${Date.now()}-${i}`,
+                content: c.content,
+                topics: c.topics
+            })),
+            processingStatus: 'completed'
+        };
+
+    } catch (error) {
+        console.error("Gemini document processing failed:", error);
+        throw new Error("Failed to process document with AI.");
+    }
+};
+
+// --- End Topic Extraction ---
+
 
 export const generateIntroSuggestion = async (personas: Persona[]): Promise<string> => {
     if (!process.env.API_KEY) {
@@ -114,10 +296,19 @@ And with that, here's the conversation with ${andNames}.`
 
 const parseAndValidateResponse = (text: string, personas: Persona[]): ScriptLine[] => {
     let jsonStr = text.trim();
-    const fenceRegex = /^```(?:json)?\s*\n?(.*?)\n?\s*```$/s;
+    // Improved regex to find JSON block anywhere in text, necessary when using Search Grounding which adds citations/text.
+    // Removed ^ and $ anchors.
+    const fenceRegex = /```(?:json)?\s*\n?(.*?)\n?\s*```/s;
     const match = jsonStr.match(fenceRegex);
     if (match && match[1]) {
         jsonStr = match[1].trim();
+    } else {
+        // Fallback: try to find the first [ and last ]
+        const firstBracket = jsonStr.indexOf('[');
+        const lastBracket = jsonStr.lastIndexOf(']');
+        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+            jsonStr = jsonStr.substring(firstBracket, lastBracket + 1);
+        }
     }
 
     try {
@@ -184,7 +375,7 @@ export const generateScript = async (
 
         const sourceDocs = p.sourceDocuments.length > 0
             ? `Knowledge Base for ${p.name} (MUST draw from these sources):\n` + p.sourceDocuments.map((doc, i) =>
-                `--- Document ${i+1}: ${doc.name} ---\n${doc.content}\n--- End Document ${i+1} ---`
+                `--- Document ${i+1}: ${doc.name} ---\nMetadata: ${JSON.stringify(doc.metadata || {})}\nKey Topics: ${doc.topics?.join(', ') || 'N/A'}\nContent:\n${doc.content}\n--- End Document ${i+1} ---`
               ).join('\n\n')
             : `No specific source documents provided for ${p.name}. Base dialogue on their general persona characteristics (e.g., ask questions, facilitate).`;
         
@@ -267,8 +458,9 @@ ${sourceDocs}`
             };
         }
 
-        // Apply Thinking Config only if budget > 0 and model supports it (Gemini 2.5 series)
-        if (settings.modelName.includes('2.5') && settings.thinkingBudget > 0) {
+        // Apply Thinking Config only if budget > 0 and model supports it.
+        // Currently supported on Gemini 2.5 series and Gemini 3.0 Pro.
+        if ((settings.modelName.includes('2.5') || settings.modelName.includes('3-pro')) && settings.thinkingBudget > 0) {
             config.thinkingConfig = { thinkingBudget: settings.thinkingBudget };
         }
 
@@ -546,8 +738,8 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
                                 vocabularyComplexity: { type: Type.STRING, enum: VOCAB_COMPLEXITIES },
                                 humorLevel: { type: Type.STRING, enum: HUMOR_LEVELS },
                                 fillerWords: { type: Type.STRING, description: "A comma-separated list of filler words detected." },
-                                commonPauses: { type: Type.STRING, description: "Textual patterns suggesting pauses." },
-                                speechImpediments: { type: Type.STRING, description: "Unusual syntax or repetition." },
+                                commonPauses: { type: Type.STRING, description: "How pauses are manifested." },
+                                speechImpediments: { type: Type.STRING, description: "Any noticeable speech impediments." },
                             },
                         },
                     },
@@ -558,6 +750,7 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
         const parsedText = response.text.trim();
         const parsedData = JSON.parse(parsedText);
         
+        // Basic validation
         if (typeof parsedData !== 'object' || parsedData === null) {
             throw new Error("AI returned invalid data format.");
         }
@@ -565,8 +758,8 @@ export const analyzeDocumentsForPersona = async (documents: SourceDocument[]): P
         return parsedData as PersonaAnalysisResult;
 
     } catch (error) {
-        console.error("Error analyzing documents with Gemini:", error);
-        throw new Error("Failed to analyze the documents using AI.");
+        console.error("Error analyzing transcript with Gemini:", error);
+        throw new Error("Failed to analyze the transcript using AI.");
     }
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Persona, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, SourceDocument, ContextFile, PersonaAnalysisResult } from '../types';
 import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS } from '../constants';
 import Button from './common/Button';
@@ -8,7 +8,7 @@ import Select from './common/Select';
 import Textarea from './common/Textarea';
 import { PlusIcon, TrashIcon, ArrowRightIcon, UploadIcon, ArrowDownTrayIcon, DocumentIcon, VideoCameraIcon, MusicalNoteIcon, MicrophoneIcon, SparklesIcon } from './icons/Icons';
 import AudioAnalysisModal from './AudioAnalysisModal';
-import { analyzeDocumentsForPersona } from '../services/geminiService';
+import { analyzeDocumentsForPersona, processDocument } from '../services/geminiService';
 import Loader from './common/Loader';
 
 interface PersonaBuilderProps {
@@ -41,6 +41,8 @@ const PersonaSources: React.FC<{
   persona: Persona;
   onUpdatePersona: (updatedPersona: Persona) => void;
 }> = ({ persona, onUpdatePersona }) => {
+    const [isUploading, setIsUploading] = useState(false);
+    const [selectedDocForDetails, setSelectedDocForDetails] = useState<SourceDocument | null>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -51,30 +53,51 @@ const PersonaSources: React.FC<{
       return;
     }
 
+    setIsUploading(true);
     const newDocuments: SourceDocument[] = [...persona.sourceDocuments];
 
-    // FIX: Using a standard for-loop to iterate over FileList. This can prevent type inference issues with 'for...of' on certain iterable types in specific TypeScript configurations, which may have been causing 'file' to be treated as 'unknown'.
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (!file) {
-        continue;
-      }
-      if (newDocuments.length >= 3) break;
-      try {
-        const content = await file.text();
-        newDocuments.push({
-          id: `${Date.now()}-${file.name}`,
+      if (!file) continue;
+      
+      const tempId = `${Date.now()}-${file.name}`;
+      
+      // Add placeholder state
+      const placeholderDoc: SourceDocument = {
+          id: tempId,
           name: file.name,
-          content: content,
-        });
+          content: '',
+          processingStatus: 'processing'
+      };
+      
+      try {
+          // Optimistically update state would happen here in a real redux loop, 
+          // but we just wait for processing to finish before updating local component state 
+          // to avoid complex management in this simple parent-child setup.
+          const processedData = await processDocument(file);
+          newDocuments.push({
+              id: tempId,
+              name: file.name,
+              content: processedData.content || '',
+              metadata: processedData.metadata,
+              chunks: processedData.chunks,
+              topics: processedData.topics,
+              processingStatus: 'completed'
+          });
       } catch (error: any) {
-        console.error("Error reading file:", error);
-        alert(`Could not read file ${file.name}. Please ensure it is a text-based file (e.g., .txt, .md).`);
+          console.error("Error processing file:", error);
+           newDocuments.push({
+              id: tempId,
+              name: file.name,
+              content: '',
+              processingStatus: 'error',
+              errorMessage: error.message
+          });
       }
     }
 
     onUpdatePersona({ ...persona, sourceDocuments: newDocuments });
-    // Reset file input value to allow re-uploading the same file
+    setIsUploading(false);
     event.target.value = '';
   };
 
@@ -82,39 +105,177 @@ const PersonaSources: React.FC<{
     const updatedDocs = persona.sourceDocuments.filter(doc => doc.id !== docId);
     onUpdatePersona({ ...persona, sourceDocuments: updatedDocs });
   };
+  
+  const getStatusIcon = (status: string) => {
+      switch(status) {
+          case 'processing': return <span className="animate-spin h-3 w-3 rounded-full border-2 border-accent-primary border-t-transparent mr-2"></span>;
+          case 'error': return <span className="text-red-500 mr-2 text-xs">⚠️</span>;
+          case 'completed': return <span className="text-green-500 mr-2 text-xs">✓</span>;
+          default: return null;
+      }
+  }
+
+  // Cross-document clustering and visualization
+  const aggregatedTopics = useMemo(() => {
+    const allTopics = new Set<string>();
+    persona.sourceDocuments.forEach(doc => {
+        if (doc.topics) doc.topics.forEach(t => allTopics.add(t));
+    });
+    return Array.from(allTopics);
+  }, [persona.sourceDocuments]);
+
+  // Simple heuristic for consistency: Do documents share *any* topics?
+  // Only applicable if we have > 1 document.
+  const consistencyWarning = useMemo(() => {
+      if (persona.sourceDocuments.length < 2) return null;
+      
+      const docsWithTopics = persona.sourceDocuments.filter(d => d.topics && d.topics.length > 0);
+      if (docsWithTopics.length < 2) return null;
+
+      // Check intersection between first doc and others (simplified check)
+      const baseTopics = new Set(docsWithTopics[0].topics);
+      let hasOverlap = false;
+      
+      for (let i = 1; i < docsWithTopics.length; i++) {
+          const currentTopics = docsWithTopics[i].topics || [];
+          if (currentTopics.some(t => baseTopics.has(t))) {
+              hasOverlap = true;
+              break;
+          }
+      }
+      
+      // If we looked at >1 docs and found NO overlap, return warning
+      return hasOverlap ? null : "Sources appear to cover disjointed topics.";
+  }, [persona.sourceDocuments]);
+
 
   return (
     <div className="mt-4 pt-4 border-t border-divider">
-      <h5 className="text-sm font-semibold text-text-primary mb-2">Source Materials ({persona.sourceDocuments.length}/3)</h5>
+      <h5 className="text-sm font-semibold text-text-primary mb-2">Knowledge Base ({persona.sourceDocuments.length}/3)</h5>
+      
+      {/* Topic Cluster */}
+      {aggregatedTopics.length > 0 && (
+          <div className="mb-3">
+              <p className="text-xs text-text-secondary mb-1">Detected Themes:</p>
+              <div className="flex flex-wrap gap-1">
+                  {aggregatedTopics.slice(0, 8).map(topic => (
+                      <span key={topic} className="bg-bg-primary border border-divider text-[10px] px-2 py-0.5 rounded-full text-text-secondary">
+                          {topic}
+                      </span>
+                  ))}
+                  {aggregatedTopics.length > 8 && (
+                      <span className="text-[10px] text-text-secondary px-1 self-center">+{aggregatedTopics.length - 8} more</span>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {consistencyWarning && (
+          <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs text-yellow-500">
+              ⚠️ {consistencyWarning} Consider checking if these documents belong to the same persona.
+          </div>
+      )}
+
       <div className="space-y-2">
         {persona.sourceDocuments.map(doc => (
-          <div key={doc.id} className="flex items-center justify-between bg-bg-primary p-2 rounded-md text-left">
-            <p className="text-xs text-text-secondary truncate pr-2" title={doc.name}>{doc.name}</p>
-            <button onClick={() => removeDocument(doc.id)} className="text-gray-500 hover:text-red-400 flex-shrink-0">
-              <TrashIcon className="w-4 h-4" />
-            </button>
+          <div key={doc.id} className="bg-bg-primary p-2 rounded-md text-left transition-colors hover:bg-bg-secondary group">
+             <div className="flex items-center justify-between cursor-pointer" onClick={() => setSelectedDocForDetails(doc)}>
+                <div className="flex items-center overflow-hidden">
+                    {getStatusIcon(doc.processingStatus)}
+                    <p className="text-xs text-text-secondary truncate pr-2" title={doc.name}>{doc.name}</p>
+                </div>
+                <div className="flex items-center">
+                    <button onClick={(e) => { e.stopPropagation(); removeDocument(doc.id); }} className="text-gray-500 hover:text-red-400 flex-shrink-0">
+                        <TrashIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+            {doc.metadata && (
+                <div className="mt-1 flex gap-2 text-[10px] text-text-secondary opacity-75">
+                    {doc.metadata.author && <span>Auth: {doc.metadata.author}</span>}
+                    {doc.chunks && <span>• {doc.chunks.length} chunks</span>}
+                    <span className="hidden group-hover:inline text-accent-primary ml-auto text-[9px]">View Details</span>
+                </div>
+            )}
+             {doc.processingStatus === 'error' && <p className="text-[10px] text-red-400 mt-1">{doc.errorMessage || 'Processing failed'}</p>}
           </div>
         ))}
       </div>
+      
       {persona.sourceDocuments.length < 3 && (
         <div className="mt-3">
-          <label
-            htmlFor={`file-upload-${persona.id}`}
-            className="w-full flex justify-center items-center px-4 py-2 border-2 border-dashed border-divider rounded-md cursor-pointer hover:border-accent-primary transition-colors"
-          >
-            <UploadIcon className="w-5 h-5 text-text-secondary mr-2"/>
-            <span className="text-sm font-medium text-text-secondary">Add Document(s)</span>
-          </label>
-          <input
-            id={`file-upload-${persona.id}`}
-            name={`file-upload-${persona.id}`}
-            type="file"
-            className="sr-only"
-            accept=".txt,.md"
-            onChange={handleFileChange}
-            multiple
-          />
+            {isUploading ? (
+                <div className="text-xs text-text-secondary text-center py-2">Processing documents...</div>
+            ) : (
+              <>
+                  <label
+                    htmlFor={`file-upload-${persona.id}`}
+                    className="w-full flex justify-center items-center px-4 py-2 border-2 border-dashed border-divider rounded-md cursor-pointer hover:border-accent-primary transition-colors"
+                  >
+                    <UploadIcon className="w-5 h-5 text-text-secondary mr-2"/>
+                    <span className="text-sm font-medium text-text-secondary">Add Document (PDF, Word, Text)</span>
+                  </label>
+                  <input
+                    id={`file-upload-${persona.id}`}
+                    name={`file-upload-${persona.id}`}
+                    type="file"
+                    className="sr-only"
+                    accept=".txt,.md,.pdf,.docx,.doc"
+                    onChange={handleFileChange}
+                    multiple
+                  />
+              </>
+            )}
         </div>
+      )}
+
+      {/* Document Details Modal */}
+      {selectedDocForDetails && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-bg-secondary rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col">
+                  <div className="p-4 border-b border-divider flex justify-between items-center">
+                      <h4 className="font-semibold text-text-primary truncate">{selectedDocForDetails.name}</h4>
+                      <button onClick={() => setSelectedDocForDetails(null)} className="text-text-secondary hover:text-white">&times;</button>
+                  </div>
+                  <div className="p-4 overflow-y-auto space-y-4">
+                      <div>
+                          <h5 className="text-xs font-bold text-text-secondary uppercase mb-1">Metadata</h5>
+                          <pre className="text-xs text-text-primary bg-bg-primary p-2 rounded overflow-auto">
+                              {JSON.stringify(selectedDocForDetails.metadata, null, 2)}
+                          </pre>
+                      </div>
+                      {selectedDocForDetails.topics && (
+                          <div>
+                            <h5 className="text-xs font-bold text-text-secondary uppercase mb-1">Extracted Topics</h5>
+                            <div className="flex flex-wrap gap-1">
+                                {selectedDocForDetails.topics.map(t => (
+                                    <span key={t} className="bg-bg-primary text-[10px] px-2 py-1 rounded text-accent-primary">{t}</span>
+                                ))}
+                            </div>
+                          </div>
+                      )}
+                      {selectedDocForDetails.chunks && (
+                          <div>
+                              <h5 className="text-xs font-bold text-text-secondary uppercase mb-1">Semantic Chunks ({selectedDocForDetails.chunks.length})</h5>
+                              <div className="space-y-2">
+                                  {selectedDocForDetails.chunks.slice(0, 5).map((chunk, idx) => (
+                                      <div key={idx} className="bg-bg-primary p-2 rounded text-xs border border-divider">
+                                          <p className="text-text-secondary mb-1 font-mono text-[9px]">Topics: {chunk.topics.join(', ')}</p>
+                                          <p className="text-text-primary line-clamp-2">{chunk.content}</p>
+                                      </div>
+                                  ))}
+                                  {selectedDocForDetails.chunks.length > 5 && (
+                                      <p className="text-xs text-center text-text-secondary italic">...and {selectedDocForDetails.chunks.length - 5} more chunks.</p>
+                                  )}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+                  <div className="p-4 border-t border-divider text-right">
+                      <Button variant="secondary" onClick={() => setSelectedDocForDetails(null)}>Close</Button>
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );
@@ -127,6 +288,8 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+
 
     const handleTraitToggle = (trait: string) => {
         setPersona(p => ({
@@ -197,27 +360,54 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
         const files = event.target.files;
         if (!files || files.length === 0) return;
     
+        setIsUploading(true);
         const newDocuments: SourceDocument[] = [...sourceDocuments];
     
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          if (!file) {
-            continue;
-          }
+          if (!file) continue;
+          
+          const tempId = `${Date.now()}-${file.name}`;
+          
+          // Optimistic UI
+          newDocuments.push({
+             id: tempId,
+             name: file.name,
+             content: '',
+             processingStatus: 'processing'
+          });
+          setSourceDocuments([...newDocuments]); // Force update to show loading state
+
           try {
-            const content = await file.text();
-            newDocuments.push({
-              id: `${Date.now()}-${file.name}`,
-              name: file.name,
-              content: content,
-            });
+            const processed = await processDocument(file);
+             // Find and update
+             const index = newDocuments.findIndex(d => d.id === tempId);
+             if (index !== -1) {
+                 newDocuments[index] = {
+                     id: tempId,
+                     name: file.name,
+                     content: processed.content || '',
+                     metadata: processed.metadata,
+                     chunks: processed.chunks,
+                     topics: processed.topics,
+                     processingStatus: 'completed'
+                 };
+             }
           } catch (error: any) {
-            console.error("Error reading file:", error);
-            alert(`Could not read file ${file.name}. Please ensure it is a text-based file.`);
+            console.error("Error processing file:", error);
+             const index = newDocuments.findIndex(d => d.id === tempId);
+             if (index !== -1) {
+                 newDocuments[index] = {
+                     ...newDocuments[index],
+                     processingStatus: 'error',
+                     errorMessage: error.message
+                 };
+             }
           }
         }
     
         setSourceDocuments(newDocuments);
+        setIsUploading(false);
         event.target.value = '';
       };
 
@@ -226,12 +416,15 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
     };
 
     const handleAnalyzeDocuments = async () => {
-        if (sourceDocuments.length === 0) return;
+        // Filter only completed docs
+        const completedDocs = sourceDocuments.filter(d => d.processingStatus === 'completed');
+        if (completedDocs.length === 0) return;
+        
         setIsAnalyzing(true);
         setAnalysisError(null);
         try {
-            const analysis = await analyzeDocumentsForPersona(sourceDocuments);
-            handleAnalysisComplete(analysis); // Reuse the same logic as audio analysis
+            const analysis = await analyzeDocumentsForPersona(completedDocs);
+            handleAnalysisComplete(analysis);
         } catch (e: any) {
             setAnalysisError(e.message || "An unknown error occurred.");
         } finally {
@@ -242,12 +435,23 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if(persona.name && persona.role) {
-            onAddPersona(persona, sourceDocuments);
+            // Only allow valid docs? or all? Assuming all so user can retry errors if they want, but usually better to filter.
+            const validDocs = sourceDocuments.filter(d => d.processingStatus === 'completed');
+            onAddPersona(persona, validDocs);
             setPersona(emptyPersona);
             setSourceDocuments([]);
             setAnalysisError(null);
         }
     };
+    
+    const getStatusIcon = (status: string) => {
+      switch(status) {
+          case 'processing': return <span className="animate-spin h-3 w-3 rounded-full border-2 border-accent-primary border-t-transparent mr-2"></span>;
+          case 'error': return <span className="text-red-500 mr-2 text-xs">⚠️</span>;
+          case 'completed': return <span className="text-green-500 mr-2 text-xs">✓</span>;
+          default: return null;
+      }
+    }
 
     return (
         <Card>
@@ -266,28 +470,40 @@ const PersonaForm: React.FC<{ onAddPersona: (persona: Omit<Persona, 'id' | 'sour
 
                 <div className="p-4 rounded-lg bg-bg-primary space-y-3 border border-divider">
                     <h4 className="text-md font-semibold text-text-primary">Create from Documents</h4>
-                    <p className="text-sm text-text-secondary">Upload documents to have the AI analyze them and auto-fill the persona details below.</p>
+                    <p className="text-sm text-text-secondary">Upload documents (PDF, Word, Text) to have the AI analyze them and auto-fill the persona details below.</p>
 
                     <div className="space-y-2">
                         {sourceDocuments.map(doc => (
-                        <div key={doc.id} className="flex items-center justify-between bg-bg-secondary p-2 rounded-md text-left">
-                            <p className="text-xs text-text-secondary truncate pr-2" title={doc.name}>{doc.name}</p>
-                            <button onClick={() => removeSourceDoc(doc.id)} className="text-gray-500 hover:text-red-400 flex-shrink-0">
-                            <TrashIcon className="w-4 h-4" />
-                            </button>
+                        <div key={doc.id} className="bg-bg-secondary p-2 rounded-md text-left">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center overflow-hidden">
+                                    {getStatusIcon(doc.processingStatus)}
+                                    <p className="text-xs text-text-secondary truncate pr-2" title={doc.name}>{doc.name}</p>
+                                </div>
+                                <button onClick={() => removeSourceDoc(doc.id)} className="text-gray-500 hover:text-red-400 flex-shrink-0">
+                                <TrashIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                            {doc.processingStatus === 'error' && <p className="text-[10px] text-red-400 mt-1">{doc.errorMessage || 'Processing failed'}</p>}
+                            {doc.metadata && (
+                                <div className="mt-1 flex gap-2 text-[10px] text-text-secondary opacity-75">
+                                    {doc.metadata.author && <span>Auth: {doc.metadata.author}</span>}
+                                    {doc.chunks && <span>Chunks: {doc.chunks.length}</span>}
+                                </div>
+                            )}
                         </div>
                         ))}
                     </div>
 
-                    <label htmlFor="doc-upload" className="w-full flex justify-center items-center px-4 py-2 border-2 border-dashed border-divider rounded-md cursor-pointer hover:border-accent-primary transition-colors">
+                    <label htmlFor="doc-upload" className={`w-full flex justify-center items-center px-4 py-2 border-2 border-dashed border-divider rounded-md cursor-pointer hover:border-accent-primary transition-colors ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
                         <UploadIcon className="w-5 h-5 text-text-secondary mr-2"/>
-                        <span className="text-sm font-medium text-text-secondary">Add Document(s)</span>
+                        <span className="text-sm font-medium text-text-secondary">{isUploading ? 'Uploading & Processing...' : 'Add Document(s)'}</span>
                     </label>
-                    <input id="doc-upload" type="file" className="sr-only" onChange={handleSourceDocChange} multiple accept=".txt,.md" />
+                    <input id="doc-upload" type="file" className="sr-only" onChange={handleSourceDocChange} multiple accept=".txt,.md,.pdf,.docx,.doc" disabled={isUploading} />
 
-                    {sourceDocuments.length > 0 && !isAnalyzing && (
+                    {sourceDocuments.length > 0 && !isAnalyzing && !isUploading && (
                         <div className="pt-2">
-                            <Button type="button" onClick={handleAnalyzeDocuments} disabled={isAnalyzing} leftIcon={<SparklesIcon />}>
+                            <Button type="button" onClick={handleAnalyzeDocuments} disabled={isAnalyzing || sourceDocuments.every(d => d.processingStatus !== 'completed')} leftIcon={<SparklesIcon />}>
                                 Analyze & Auto-fill Form
                             </Button>
                         </div>
@@ -501,7 +717,7 @@ const PersonaBuilder: React.FC<PersonaBuilderProps> = ({ personas, setPersonas, 
     return (
         <div className="space-y-8">
             <h2 className="text-2xl font-bold text-text-primary">Step 1: Define Personas & Sources</h2>
-            <p className="text-text-secondary">Create at least two speaker personas. For each persona, you can add up to three source documents (e.g., .txt files) that the AI will use as their knowledge base.</p>
+            <p className="text-text-secondary">Create at least two speaker personas. For each persona, you can add up to three source documents that the AI will use as their knowledge base.</p>
 
             <PersonaForm onAddPersona={addPersona} />
             

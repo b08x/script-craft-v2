@@ -1,5 +1,3 @@
-
-
 import { CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel } from './types';
 
 export const COMMUNICATION_STYLES = Object.values(CommunicationStyle);
@@ -26,4 +24,5 @@ export const AVAILABLE_MODELS = [
 
 export const DEFAULT_MODEL_ID = 'gemini-2.5-flash';
 export const DEFAULT_TEMPERATURE = 0.7;
-export const MAX_THINKING_BUDGET = 24576; // For Gemini 2.5 Flash
+// Max budget depends on model: 24576 for Flash, 32768 for Pro. We use the higher limit and clamp in logic if needed.
+export const MAX_THINKING_BUDGET = 32768;

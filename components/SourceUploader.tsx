@@ -1,9 +1,11 @@
 
+
 import React, { useState } from 'react';
 import Button from './common/Button';
 import Card from './common/Card';
 import { ArrowLeftIcon, ArrowRightIcon } from './icons/Icons';
 import Loader from './common/Loader';
+import { extractTopicsFromContext } from '../services/geminiService';
 
 interface SourceUploaderProps {
   sourceText: string;
@@ -16,30 +18,22 @@ interface SourceUploaderProps {
 const SourceUploader: React.FC<SourceUploaderProps> = ({ sourceText, setSourceText, setTopics, onBack, onComplete }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     if (!sourceText.trim()) return;
     setIsProcessing(true);
-    // Simulate processing for topic extraction
-    setTimeout(() => {
-      const words = sourceText.split(/\s+/);
-      const wordFrequencies = words.reduce((acc, word) => {
-        const cleanWord = word.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
-        if (cleanWord.length > 4) { // Filter out small words
-          acc[cleanWord] = (acc[cleanWord] || 0) + 1;
-        }
-        return acc;
-      }, {} as Record<string, number>);
-
-      const sortedTopics = Object.entries(wordFrequencies)
-        // FIX: Explicitly cast count values to Number to ensure they are numeric before performing subtraction, resolving a TypeScript error.
-        .sort(([, countA], [, countB]) => Number(countB) - Number(countA))
-        .slice(0, 5)
-        .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
-        
-      setTopics(sortedTopics);
-      setIsProcessing(false);
-      onComplete();
-    }, 1500);
+    
+    try {
+        const topics = await extractTopicsFromContext(sourceText);
+        setTopics(topics);
+        onComplete();
+    } catch (e) {
+        console.error("Failed to extract topics", e);
+        // Fallback or error state handling
+        setTopics([]); 
+        onComplete(); // Move next even if topics fail, or handle error better
+    } finally {
+        setIsProcessing(false);
+    }
   };
   
   return (
@@ -64,7 +58,7 @@ const SourceUploader: React.FC<SourceUploaderProps> = ({ sourceText, setSourceTe
         </div>
       </Card>
       
-      {isProcessing && <Loader text="Analyzing content and identifying key topics..." />}
+      {isProcessing && <Loader text="Analyzing content, detecting semantic topics, and identifying key themes..." />}
 
       <div className="flex justify-between pt-4">
         <Button onClick={onBack} variant="secondary" leftIcon={<ArrowLeftIcon />}>
