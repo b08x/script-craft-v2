@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Persona, ScriptLine, GenerationSettings } from './types';
 import Stepper from './components/Stepper';
@@ -7,7 +8,7 @@ import ScriptEditor from './components/ScriptEditor';
 import ReviewAndExport from './components/ReviewAndExport';
 import { LogoIcon } from './components/icons/Icons';
 import ShowFlowEditor from './components/ShowFlowEditor';
-import { DEFAULT_DIALOGUE_LENGTH_MINUTES } from './constants';
+import { DEFAULT_DIALOGUE_LENGTH_MINUTES, DEFAULT_MODEL_ID, DEFAULT_TEMPERATURE } from './constants';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -18,6 +19,10 @@ const App: React.FC = () => {
     dialogueLengthInMinutes: DEFAULT_DIALOGUE_LENGTH_MINUTES,
     conversationStyle: 'Discussion',
     complexityLevel: 'Accessible',
+    modelName: DEFAULT_MODEL_ID,
+    temperature: DEFAULT_TEMPERATURE,
+    enableSearchGrounding: false,
+    thinkingBudget: 0,
   });
   
   const STEPS = [
@@ -44,6 +49,10 @@ const App: React.FC = () => {
         dialogueLengthInMinutes: DEFAULT_DIALOGUE_LENGTH_MINUTES,
         conversationStyle: 'Discussion',
         complexityLevel: 'Accessible',
+        modelName: DEFAULT_MODEL_ID,
+        temperature: DEFAULT_TEMPERATURE,
+        enableSearchGrounding: false,
+        thinkingBudget: 0,
       });
       setCurrentStep(1);
   }

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { Persona, GenerationSettings, ScriptLine, CommunicationStyle, ExpertiseLevel, SentenceLength, VocabComplexity, HumorLevel, PersonaAnalysisResult, SourceDocument } from '../types';
 import { COMMUNICATION_STYLES, EXPERTISE_LEVELS, HUMOR_LEVELS, PERSONALITY_TRAIT_OPTIONS, SENTENCE_LENGTHS, VOCAB_COMPLEXITIES } from "../constants";
@@ -237,32 +238,49 @@ ${sourceDocs}`
     `;
     
     try {
-        const response: GenerateContentResponse = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                temperature: 0.75,
-                // Use responseSchema for structured JSON output
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            speakerId: {
-                                type: Type.STRING,
-                            },
-                            line: {
-                                type: Type.STRING,
-                            },
+        const config: any = {
+            temperature: settings.temperature,
+        };
+
+        // Handle Search Grounding vs. JSON Schema Constraint
+        if (settings.enableSearchGrounding) {
+            // responseMimeType and responseSchema are NOT allowed when using tools like googleSearch.
+            // We enable the tool and rely on the model to follow the text prompt instructions for JSON.
+            config.tools = [{ googleSearch: {} }];
+        } else {
+            // When not using tools, we can enforce structured output.
+            config.responseMimeType = "application/json";
+            config.responseSchema = {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        speakerId: {
+                            type: Type.STRING,
                         },
-                        required: ["speakerId", "line"],
+                        line: {
+                            type: Type.STRING,
+                        },
                     },
+                    required: ["speakerId", "line"],
                 },
-            }
+            };
+        }
+
+        // Apply Thinking Config only if budget > 0 and model supports it (Gemini 2.5 series)
+        if (settings.modelName.includes('2.5') && settings.thinkingBudget > 0) {
+            config.thinkingConfig = { thinkingBudget: settings.thinkingBudget };
+        }
+
+        const response: GenerateContentResponse = await ai.models.generateContent({
+            model: settings.modelName,
+            contents: prompt,
+            config: config
         });
 
         const responseText = response.text;
+        
+        // Use parsing logic that handles potential markdown blocks (which happens often with Search Grounding)
         return parseAndValidateResponse(responseText, personas);
     } catch (error) {
         console.error("Error generating script from Gemini:", error);

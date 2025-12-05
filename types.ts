@@ -99,4 +99,8 @@ export interface GenerationSettings {
     dialogueLengthInMinutes: number;
     conversationStyle: string;
     complexityLevel: string;
+    modelName: string;
+    temperature: number;
+    enableSearchGrounding: boolean;
+    thinkingBudget: number; // 0 means disabled
 }
